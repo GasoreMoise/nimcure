@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePatients } from '@/contexts/PatientsContext';
+import { useDeliveries } from '@/contexts/DeliveryContext';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { formatDistanceToNow } from 'date-fns';
@@ -99,7 +100,15 @@ const navigationItems = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
       </svg>
     )
-  }
+  },
+  { id: 'deliveries', label: 'Deliveries', icon: (
+    <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M13.3333 5.83333H15.8333L18.3333 8.33333V13.3333H16.6667" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M5 13.3333V5.83333H13.3333" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M3.33333 15.8333C4.71405 15.8333 5.83333 14.714 5.83333 13.3333C5.83333 11.9526 4.71405 10.8333 3.33333 10.8333C1.95262 10.8333 0.833336 11.9526 0.833336 13.3333C0.833336 14.714 1.95262 15.8333 3.33333 15.8333Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M16.6667 15.8333C18.0474 15.8333 19.1667 14.714 19.1667 13.3333C19.1667 11.9526 18.0474 10.8333 16.6667 10.8333C15.286 10.8333 14.1667 11.9526 14.1667 13.3333C14.1667 14.714 15.286 15.8333 16.6667 15.8333Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )},
 ];
 
 const formatDate = (dateString?: string) => {
@@ -111,12 +120,31 @@ const formatDate = (dateString?: string) => {
   }
 };
 
+const getStatusColor = (status: Delivery['status']) => {
+  switch (status) {
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800';
+    case 'in_progress':
+      return 'bg-blue-100 text-blue-800';
+    case 'delivered':
+      return 'bg-green-100 text-green-800';
+    case 'failed':
+      return 'bg-red-100 text-red-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+};
+
 export default function PatientDetailsPage() {
   const params = useParams();
   const { patients } = usePatients();
+  const { getDeliveriesByPatient } = useDeliveries();
+  const [activeSection, setActiveSection] = useState('patient');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState(patients[0]);
   
-  // Find patient using the id from URL params
   const patient = patients.find(p => p.id === params.id);
+  const patientDeliveries = getDeliveriesByPatient(params.id as string);
 
   // Show loading or error state if patient not found
   if (!patient) {
@@ -138,10 +166,6 @@ export default function PatientDetailsPage() {
     );
   }
 
-  const [activeSection, setActiveSection] = useState('patient');
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedData, setEditedData] = useState(patient);
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setEditedData(prev => ({ ...prev, [name]: value }));
@@ -150,75 +174,6 @@ export default function PatientDetailsPage() {
   const handleSaveChanges = () => {
     // Implement the logic to update the patient data
     console.log('Saving changes');
-  };
-
-  const [deliveries, setDeliveries] = useState<Delivery[]>([
-    {
-      id: '1',
-      date: '2025-03-15T08:30:00Z',
-      items: ['Paracetamol', 'Antibiotics'],
-      status: 'in_progress',
-      rider: {
-        id: 'r1',
-        name: 'John Doe',
-        rating: 4.8,
-        totalDeliveries: 156,
-        phone: '+254712345678',
-        email: 'john.doe@nimcure.com',
-        isActive: true,
-        currentLocation: {
-          lat: -1.2921,
-          lng: 36.8219,
-          lastUpdated: '2025-03-15T10:45:00Z'
-        }
-      },
-      tracking: {
-        currentLocation: {
-          lat: -1.2921,
-          lng: 36.8219,
-          lastUpdated: '2025-03-15T10:45:00Z'
-        },
-        estimatedArrival: '2025-03-15T11:15:00Z',
-        status: 'On the way to patient',
-        lastUpdated: '2025-03-15T10:45:00Z'
-      }
-    }
-  ]);
-
-  useEffect(() => {
-    // Simulated real-time updates every 30 seconds
-    const interval = setInterval(() => {
-      setDeliveries(prevDeliveries => 
-        prevDeliveries.map(delivery => ({
-          ...delivery,
-          tracking: delivery.tracking ? {
-            ...delivery.tracking,
-            lastUpdated: new Date().toISOString(),
-            currentLocation: {
-              ...delivery.tracking.currentLocation,
-              lastUpdated: new Date().toISOString()
-            }
-          } : undefined
-        }))
-      );
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const getStatusColor = (status: Delivery['status']) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-800';
-      case 'delivered':
-        return 'bg-green-100 text-green-800';
-      case 'failed':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
   };
 
   return (
@@ -427,7 +382,7 @@ export default function PatientDetailsPage() {
                   <p className="text-sm text-gray-500 mb-8">Real-time tracking of medicine deliveries.</p>
 
                   <div className="space-y-6">
-                    {deliveries.map(delivery => (
+                    {patientDeliveries.map(delivery => (
                       <div key={delivery.id} className="border rounded-lg p-4 space-y-4">
                         <div className="flex justify-between items-start">
                           <div>
@@ -473,40 +428,40 @@ export default function PatientDetailsPage() {
                   <h2 className="text-lg font-medium text-gray-900">Rider's Profile</h2>
                   <p className="text-sm text-gray-500 mb-8">Information about the assigned delivery rider.</p>
 
-                  {deliveries[0]?.rider && (
+                  {patientDeliveries[0]?.rider && (
                     <div className="space-y-6">
                       <div className="flex items-center space-x-4">
                         <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-xl font-medium text-gray-600">
-                          {deliveries[0].rider.avatar ? (
+                          {patientDeliveries[0].rider.avatar ? (
                             <Image
-                              src={deliveries[0].rider.avatar}
-                              alt={deliveries[0].rider.name}
+                              src={patientDeliveries[0].rider.avatar}
+                              alt={patientDeliveries[0].rider.name}
                               width={64}
                               height={64}
                               className="rounded-full"
                             />
                           ) : (
-                            deliveries[0].rider.name.split(' ').map(n => n[0]).join('')
+                            patientDeliveries[0].rider.name.split(' ').map(n => n[0]).join('')
                           )}
                         </div>
                         <div>
-                          <h3 className="text-lg font-medium">{deliveries[0].rider.name}</h3>
+                          <h3 className="text-lg font-medium">{patientDeliveries[0].rider.name}</h3>
                           <div className="flex items-center space-x-2">
                             <span className="flex items-center">
                               <svg className="h-4 w-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M10 15.934l6.18 3.246-.985-6.903L20 7.393l-6.902-1.004L10 0 6.902 6.389 0 7.393l4.805 4.884-.985 6.903L10 15.934z" clipRule="evenodd" />
                               </svg>
-                              <span className="ml-1 text-sm text-gray-600">{deliveries[0].rider.rating}</span>
+                              <span className="ml-1 text-sm text-gray-600">{patientDeliveries[0].rider.rating}</span>
                             </span>
                             <span className="text-sm text-gray-500">•</span>
-                            <span className="text-sm text-gray-600">{deliveries[0].rider.totalDeliveries} deliveries</span>
+                            <span className="text-sm text-gray-600">{patientDeliveries[0].rider.totalDeliveries} deliveries</span>
                           </div>
                         </div>
                         <div className="ml-auto">
                           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            deliveries[0].rider.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            patientDeliveries[0].rider.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                           }`}>
-                            {deliveries[0].rider.isActive ? 'Active' : 'Inactive'}
+                            {patientDeliveries[0].rider.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </div>
                       </div>
@@ -514,23 +469,23 @@ export default function PatientDetailsPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <h4 className="text-sm font-medium text-gray-700">Phone</h4>
-                          <p className="text-sm text-gray-600">{deliveries[0].rider.phone}</p>
+                          <p className="text-sm text-gray-600">{patientDeliveries[0].rider.phone}</p>
                         </div>
                         <div>
                           <h4 className="text-sm font-medium text-gray-700">Email</h4>
-                          <p className="text-sm text-gray-600">{deliveries[0].rider.email}</p>
+                          <p className="text-sm text-gray-600">{patientDeliveries[0].rider.email}</p>
                         </div>
                       </div>
 
-                      {deliveries[0].rider.currentLocation && (
+                      {patientDeliveries[0].rider.currentLocation && (
                         <div>
                           <h4 className="text-sm font-medium text-gray-700 mb-2">Current Location</h4>
                           <div className="bg-gray-50 rounded-lg p-4">
                             <p className="text-sm text-gray-600">
-                              Location: {deliveries[0].rider.currentLocation.lat}, {deliveries[0].rider.currentLocation.lng}
+                              Location: {patientDeliveries[0].rider.currentLocation.lat}, {patientDeliveries[0].rider.currentLocation.lng}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
-                              Last updated: {formatDate(deliveries[0].rider.currentLocation.lastUpdated)}
+                              Last updated: {formatDate(patientDeliveries[0].rider.currentLocation.lastUpdated)}
                             </p>
                           </div>
                         </div>
@@ -589,6 +544,61 @@ export default function PatientDetailsPage() {
                 <div className="bg-white shadow rounded-lg p-6">
                   <h2 className="text-lg font-medium mb-4">Medication History</h2>
                   <PrescriptionHistory history={patient.medicationHistory} />
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'deliveries' && (
+              <div className="bg-white shadow rounded-lg p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-lg font-medium">Deliveries</h2>
+                  <Link
+                    href={`/deliveries/new?patientId=${patient?.id}`}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    Schedule New Delivery
+                  </Link>
+                </div>
+
+                <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-300">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Date
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Items
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Rider
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {patientDeliveries.map((delivery) => (
+                        <tr key={delivery.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {new Date(delivery.date).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500">
+                            {delivery.items.join(', ')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(delivery.status)}`}>
+                              {delivery.status.replace('_', ' ').toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {delivery.riderName}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}

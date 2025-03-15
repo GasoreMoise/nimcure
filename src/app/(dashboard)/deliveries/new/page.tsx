@@ -1,155 +1,207 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useDeliveries } from '@/contexts/DeliveryContext';
+import { usePatients } from '@/contexts/PatientsContext';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 
 export default function NewDeliveryPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const patientId = searchParams.get('patientId');
+  const { addDelivery } = useDeliveries();
+  const { patients } = usePatients();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
-    patientId: patientId || '',
-    items: [''],
+    patientId: '',
+    packageCode: '',
     deliveryDate: '',
+    items: [''],
     notes: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement delivery creation
-    router.push('/deliveries');
-  };
+    setIsSubmitting(true);
 
-  const addItem = () => {
-    setFormData(prev => ({
-      ...prev,
-      items: [...prev.items, ''],
-    }));
-  };
+    try {
+      const selectedPatient = patients.find(p => p.id === formData.patientId);
+      if (!selectedPatient) throw new Error('Patient not found');
 
-  const removeItem = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index),
-    }));
-  };
+      const newDelivery = {
+        id: formData.packageCode || Math.random().toString(36).substr(2, 9),
+        patientId: selectedPatient.id,
+        patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+        patientPhone: selectedPatient.phone,
+        date: formData.deliveryDate,
+        items: formData.items.filter(item => item.trim() !== ''),
+        status: 'pending' as const,
+        paymentStatus: 'unpaid' as const,
+        location: selectedPatient.location,
+        riderId: '',
+        riderName: '',
+        notes: formData.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tracking: {
+          estimatedArrival: new Date(formData.deliveryDate).toISOString(),
+          status: 'pending',
+          lastUpdated: new Date().toISOString()
+        }
+      };
 
-  const updateItem = (index: number, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items.map((item, i) => i === index ? value : item),
-    }));
+      await addDelivery(newDelivery);
+      router.push('/deliveries');
+    } catch (error) {
+      console.error('Failed to create delivery:', error);
+      // You might want to add error handling UI here
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">New Delivery</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Create a new delivery order for a patient.
-        </p>
-      </div>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-gray-900">New Delivery</h1>
+          <Link
+            href="/deliveries"
+            className="text-sm text-blue-600 hover:text-blue-700"
+          >
+            ← Back to Deliveries
+          </Link>
+        </div>
 
-      <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-lg">
-        <form onSubmit={handleSubmit} className="space-y-6 p-6">
-          {!patientId && (
+        <div className="bg-white shadow rounded-lg">
+          <form onSubmit={handleSubmit} className="space-y-6 p-6">
             <div>
-              <label htmlFor="patientId" className="block text-sm font-medium text-gray-700">
-                Patient ID
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Select Patient
               </label>
-              <input
-                type="text"
-                id="patientId"
+              <select
                 value={formData.patientId}
-                onChange={(e) => setFormData({ ...formData, patientId: e.target.value })}
-                className="mt-1 block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
+                onChange={(e) => setFormData(prev => ({ ...prev, patientId: e.target.value }))}
+                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 required
+              >
+                <option value="">Select a patient...</option>
+                {patients.map(patient => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.firstName} {patient.lastName} - {patient.hospitalId}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Package Code
+              </label>
+              <Input
+                type="text"
+                value={formData.packageCode}
+                onChange={(e) => setFormData(prev => ({ ...prev, packageCode: e.target.value }))}
+                placeholder="Enter package code"
+                className="w-full"
               />
             </div>
-          )}
 
-          <div>
-            <label htmlFor="deliveryDate" className="block text-sm font-medium text-gray-700">
-              Delivery Date
-            </label>
-            <input
-              type="date"
-              id="deliveryDate"
-              value={formData.deliveryDate}
-              onChange={(e) => setFormData({ ...formData, deliveryDate: e.target.value })}
-              className="mt-1 block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
-              required
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Delivery Date
+              </label>
+              <Input
+                type="datetime-local"
+                value={formData.deliveryDate}
+                onChange={(e) => setFormData(prev => ({ ...prev, deliveryDate: e.target.value }))}
+                required
+                className="w-full"
+              />
+            </div>
 
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-gray-700">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Items
               </label>
-              <button
+              <div className="space-y-2">
+                {formData.items.map((item, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={item}
+                      onChange={(e) => {
+                        const newItems = [...formData.items];
+                        newItems[index] = e.target.value;
+                        setFormData(prev => ({ ...prev, items: newItems }));
+                      }}
+                      placeholder="Enter item description"
+                      className="flex-1"
+                      required
+                    />
+                    {formData.items.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            items: prev.items.filter((_, i) => i !== index)
+                          }));
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      items: [...prev.items, '']
+                    }));
+                  }}
+                >
+                  + Add Item
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                rows={3}
+                placeholder="Add any delivery notes or special instructions..."
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button
                 type="button"
-                onClick={addItem}
-                className="text-sm text-blue-600 hover:text-blue-500"
+                variant="outline"
+                onClick={() => router.push('/deliveries')}
               >
-                Add item
-              </button>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Creating...' : 'Create Delivery'}
+              </Button>
             </div>
-            <div className="mt-2 space-y-3">
-              {formData.items.map((item, index) => (
-                <div key={index} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={item}
-                    onChange={(e) => updateItem(index, e.target.value)}
-                    placeholder="Enter medication name"
-                    className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
-                    required
-                  />
-                  {formData.items.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeItem(index)}
-                      className="inline-flex items-center rounded-md bg-white px-2.5 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="notes" className="block text-sm font-medium text-gray-700">
-              Notes
-            </label>
-            <textarea
-              id="notes"
-              rows={3}
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="mt-1 block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-600 sm:text-sm sm:leading-6"
-            />
-          </div>
-
-          <div className="flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="rounded-md px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="inline-flex justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              Create Delivery
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );

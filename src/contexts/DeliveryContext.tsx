@@ -1,78 +1,114 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
+
+export type DeliveryStatus = 'pending' | 'in_progress' | 'delivered' | 'failed';
+
+interface Rider {
+  id: string;
+  name: string;
+  avatar?: string;
+  rating: number;
+  totalDeliveries: number;
+  isActive: boolean;
+  phone: string;
+  email: string;
+  currentLocation?: {
+    lat: number;
+    lng: number;
+    lastUpdated: string;
+  };
+}
 
 export interface Delivery {
   id: string;
   patientId: string;
+  patientName: string;
+  patientPhone: string;
   date: string;
   items: string[];
-  status: 'pending' | 'in_transit' | 'delivered' | 'cancelled';
+  status: 'pending' | 'in_progress' | 'delivered' | 'failed';
+  paymentStatus: 'paid' | 'unpaid';
+  location: string;
   riderId: string;
   riderName: string;
+  rider?: Rider;
+  notes?: string;
   createdAt: string;
   updatedAt: string;
+  tracking?: {
+    currentLocation?: { lat: number; lng: number };
+    estimatedArrival: string;
+    status: string;
+    lastUpdated: string;
+  };
 }
 
 interface DeliveryContextType {
   deliveries: Delivery[];
-  updateDelivery: (id: string, data: Partial<Delivery>) => void;
-  addDelivery: (delivery: Delivery) => void;
+  addDelivery: (delivery: Delivery) => Promise<void>;
+  updateDelivery: (id: string, delivery: Partial<Delivery>) => Promise<void>;
+  deleteDelivery: (id: string) => Promise<void>;
   getDeliveriesByPatient: (patientId: string) => Delivery[];
 }
 
 const DeliveryContext = createContext<DeliveryContextType | undefined>(undefined);
 
-// Mock initial data
-const initialDeliveries: Delivery[] = [
-  {
-    id: '1',
-    patientId: '1',
-    date: '2025-03-14',
-    items: ['Paracetamol', 'Vitamin C'],
-    status: 'delivered',
-    riderId: '1',
-    riderName: 'John Doe',
-    createdAt: '2025-03-14T08:00:00Z',
-    updatedAt: '2025-03-14T10:30:00Z',
-  },
-  {
-    id: '2',
-    patientId: '1',
-    date: '2025-03-01',
-    items: ['Amoxicillin'],
-    status: 'delivered',
-    riderId: '2',
-    riderName: 'Jane Smith',
-    createdAt: '2025-03-01T09:00:00Z',
-    updatedAt: '2025-03-01T11:45:00Z',
-  },
-  {
-    id: '3',
-    patientId: '1',
-    date: '2025-03-15',
-    items: ['Insulin', 'Syringes'],
-    status: 'in_transit',
-    riderId: '1',
-    riderName: 'John Doe',
-    createdAt: '2025-03-15T07:30:00Z',
-    updatedAt: '2025-03-15T08:15:00Z',
-  },
-];
+export function DeliveryProvider({ children }: { children: React.ReactNode }) {
+  const [deliveries, setDeliveries] = useState<Delivery[]>(() => {
+    // Initialize from localStorage on mount
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('deliveries');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (err) {
+          console.error('Failed to parse saved deliveries:', err);
+        }
+      }
+    }
+    return [];
+  });
 
-export function DeliveryProvider({ children }: { children: ReactNode }) {
-  const [deliveries, setDeliveries] = useState<Delivery[]>(initialDeliveries);
+  // Save to localStorage whenever deliveries change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('deliveries', JSON.stringify(deliveries));
+    }
+  }, [deliveries]);
 
-  const updateDelivery = (id: string, data: Partial<Delivery>) => {
-    setDeliveries(currentDeliveries =>
-      currentDeliveries.map(delivery =>
-        delivery.id === id ? { ...delivery, ...data, updatedAt: new Date().toISOString() } : delivery
-      )
-    );
+  const addDelivery = async (delivery: Delivery) => {
+    const newDelivery = {
+      ...delivery,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    
+    setDeliveries(prev => {
+      const updated = [...prev, newDelivery];
+      localStorage.setItem('deliveries', JSON.stringify(updated));
+      return updated;
+    });
   };
 
-  const addDelivery = (delivery: Delivery) => {
-    setDeliveries(currentDeliveries => [...currentDeliveries, delivery]);
+  const updateDelivery = async (id: string, updates: Partial<Delivery>) => {
+    setDeliveries(prev => {
+      const updated = prev.map(delivery =>
+        delivery.id === id
+          ? { ...delivery, ...updates, updatedAt: new Date().toISOString() }
+          : delivery
+      );
+      localStorage.setItem('deliveries', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const deleteDelivery = async (id: string) => {
+    setDeliveries(prev => {
+      const updated = prev.filter(delivery => delivery.id !== id);
+      localStorage.setItem('deliveries', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const getDeliveriesByPatient = (patientId: string) => {
@@ -80,7 +116,13 @@ export function DeliveryProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <DeliveryContext.Provider value={{ deliveries, updateDelivery, addDelivery, getDeliveriesByPatient }}>
+    <DeliveryContext.Provider value={{
+      deliveries,
+      addDelivery,
+      updateDelivery,
+      deleteDelivery,
+      getDeliveriesByPatient
+    }}>
       {children}
     </DeliveryContext.Provider>
   );
