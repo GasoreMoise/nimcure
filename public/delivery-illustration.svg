@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" viewBox="0 0 800 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background elements -->
+  <path d="M600 300c0 110.457-89.543 200-200 200S200 410.457 200 300 289.543 100 400 100s200 89.543 200 200z" fill="#ffffff" fill-opacity="0.1"/>
+  
+  <!-- Scooter body -->
+  <path d="M450 350c0-27.614 22.386-50 50-50h100c27.614 0 50 22.386 50 50v50h-200v-50z" fill="#FF6B6B"/>
+  <path d="M400 400h250v50c0 27.614-22.386 50-50 50H450c-27.614 0-50-22.386-50-50v-50z" fill="#FF6B6B"/>
+  
+  <!-- Wheels -->
+  <circle cx="450" cy="450" r="40" fill="#333333"/>
+  <circle cx="450" cy="450" r="30" fill="#666666"/>
+  <circle cx="650" cy="450" r="40" fill="#333333"/>
+  <circle cx="650" cy="450" r="30" fill="#666666"/>
+  
+  <!-- Delivery box -->
+  <rect x="500" y="250" width="100" height="100" rx="10" fill="#FFD93D"/>
+  <rect x="520" y="270" width="60" height="10" rx="5" fill="#FF6B6B"/>
+  <rect x="520" y="290" width="60" height="10" rx="5" fill="#FF6B6B"/>
+  
+  <!-- Rider -->
+  <path d="M550 300c0-22.091 17.909-40 40-40s40 17.909 40 40-17.909 40-40 40-40-17.909-40-40z" fill="#FF8787"/>
+  <path d="M570 350v-30c0-11.046 8.954-20 20-20s20 8.954 20 20v30h-40z" fill="#FF8787"/>
+</svg>

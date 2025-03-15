@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Main circle -->
+  <circle cx="24" cy="24" r="20" fill="#2563EB"/>
+  
+  <!-- Letter N -->
+  <path d="M18 32V16L30 32V16" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Cross symbol -->
+  <path d="M36 18L36 30M30 24L42 24" stroke="white" stroke-width="2" stroke-linecap="round"/>
+</svg>
