@@ -6,6 +6,9 @@ import { usePatients } from '@/contexts/PatientsContext';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { formatDistanceToNow } from 'date-fns';
+import { PrescriptionRenewalForm } from '@/components/PrescriptionRenewalForm';
+import { PrescriptionHistory } from '@/components/PrescriptionHistory';
+import { PatientStatusBadge } from '@/components/PatientStatusBadge';
 
 interface TabProps {
   label: string;
@@ -87,7 +90,16 @@ const navigationItems = [
       <path d="M3.33333 15.8333C4.71405 15.8333 5.83333 14.714 5.83333 13.3333C5.83333 11.9526 4.71405 10.8333 3.33333 10.8333C1.95262 10.8333 0.833336 11.9526 0.833336 13.3333C0.833336 14.714 1.95262 15.8333 3.33333 15.8333Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M16.6667 15.8333C18.0474 15.8333 19.1667 14.714 19.1667 13.3333C19.1667 11.9526 18.0474 10.8333 16.6667 10.8333C15.286 10.8333 14.1667 11.9526 14.1667 13.3333C14.1667 14.714 15.286 15.8333 16.6667 15.8333Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
-  )}
+  )},
+  { 
+    id: 'prescriptions', 
+    label: 'Prescriptions', 
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+      </svg>
+    )
+  }
 ];
 
 const formatDate = (dateString?: string) => {
@@ -101,8 +113,31 @@ const formatDate = (dateString?: string) => {
 
 export default function PatientDetailsPage() {
   const params = useParams();
-  const { patients, updatePatient } = usePatients();
-  const patient = patients.find(p => p.id === params.id) || patients[0];
+  const { patients } = usePatients();
+  
+  // Find patient using the id from URL params
+  const patient = patients.find(p => p.id === params.id);
+
+  // Show loading or error state if patient not found
+  if (!patient) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-6">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center space-x-2 mb-8">
+            <Link href="/patients" className="text-blue-600 hover:text-blue-500 text-sm">
+              Patients
+            </Link>
+            <span className="text-gray-500 text-sm">/</span>
+            <span className="text-gray-500 text-sm">View Patient</span>
+          </div>
+          <div className="bg-white shadow rounded-lg p-6">
+            <p className="text-gray-500">Patient not found</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const [activeSection, setActiveSection] = useState('patient');
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState(patient);
@@ -113,8 +148,8 @@ export default function PatientDetailsPage() {
   };
 
   const handleSaveChanges = () => {
-    updatePatient(patient.id, editedData);
-    setIsEditing(false);
+    // Implement the logic to update the patient data
+    console.log('Saving changes');
   };
 
   const [deliveries, setDeliveries] = useState<Delivery[]>([
@@ -200,7 +235,7 @@ export default function PatientDetailsPage() {
           </div>
           <div className="flex items-center space-x-4">
             <div className="text-sm text-gray-500">
-              Patient's next delivery date is <span className="font-medium">14th November 2020</span>, in <span className="font-medium">2 days</span>
+              Patient's next delivery date is <span className="font-medium">{patient.nextDeliveryDate}</span>
             </div>
             <Link
               href={`/patients/assign-package?patientId=${patient.id}`}
@@ -502,6 +537,58 @@ export default function PatientDetailsPage() {
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'prescriptions' && (
+              <div className="space-y-6">
+                {/* Active Prescriptions */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h2 className="text-lg font-medium mb-4">Active Prescriptions</h2>
+                  <div className="space-y-4">
+                    {patient.prescriptions
+                      .filter(p => p.status === 'active')
+                      .map(prescription => (
+                        <div key={prescription.id} className="border rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h3 className="font-medium">{prescription.medicationName}</h3>
+                              <p className="text-sm text-gray-500">
+                                {prescription.dosage} - {prescription.frequency}
+                              </p>
+                            </div>
+                            <PatientStatusBadge status={prescription.status} />
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                              <p className="text-sm text-gray-500">Start Date</p>
+                              <p className="font-medium">
+                                {new Date(prescription.startDate).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-500">End Date</p>
+                              <p className="font-medium">
+                                {new Date(prescription.endDate).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+
+                          <PrescriptionRenewalForm 
+                            patientId={patient.id} 
+                            prescription={prescription}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Prescription History */}
+                <div className="bg-white shadow rounded-lg p-6">
+                  <h2 className="text-lg font-medium mb-4">Medication History</h2>
+                  <PrescriptionHistory history={patient.medicationHistory} />
                 </div>
               </div>
             )}

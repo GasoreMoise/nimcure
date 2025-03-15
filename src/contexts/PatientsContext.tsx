@@ -1,114 +1,131 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+
+export type PatientStatus = 'active' | 'pending' | 'critical' | 'completed' | 'defaulted' | 'expired';
+
+export interface Prescription {
+  id: string;
+  medicationName: string;
+  dosage: string;
+  frequency: string;
+  startDate: string;
+  endDate: string;
+  refillsRemaining: number;
+  lastRefillDate?: string;
+  nextRefillDate?: string;
+  status: 'active' | 'completed' | 'expired';
+}
 
 export interface Patient {
   id: string;
-  hospitalId: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  status: string;
+  hospitalId: string;
   location: string;
   nextDeliveryDate: string;
-  paymentStatus: 'paid' | 'pending';
+  drugCycle: string;
+  status: PatientStatus;
+  createdAt: string;
+  paymentStatus: 'paid' | 'unpaid';
+  address: string;
+  gender: 'Male' | 'Female' | 'NonBinary' | 'PreferNotToSay';
+  lastDeliveryDate?: string;
+  medicationEndDate?: string;
+  missedDeliveries: number;
+  prescriptions: Prescription[];
+  medicationHistory: {
+    date: string;
+    action: 'prescribed' | 'refilled' | 'completed';
+    medicationName: string;
+    notes?: string;
+  }[];
 }
 
-interface PatientsContextType {
+export interface PatientsContextType {
   patients: Patient[];
-  updatePatient: (id: string, data: Partial<Patient>) => void;
-  addPatient: (patient: Patient) => void;
-  getPatient: (id: string) => Patient | undefined;
+  addPatient: (patient: Omit<Patient, 'prescriptions' | 'medicationHistory'>) => Promise<void>;
+  renewPrescription: (patientId: string, prescriptionId: string) => Promise<void>;
 }
 
 const PatientsContext = createContext<PatientsContextType | undefined>(undefined);
 
-// Mock initial data
-const initialPatients: Patient[] = [
-  {
-    id: '1',
-    hospitalId: 'HOS-2020-167',
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john.doe@example.com',
-    phone: '+234-7084-2920',
-    status: 'Due & Past',
-    location: 'Lagos, Nigeria',
-    nextDeliveryDate: '2020-09-12',
-    paymentStatus: 'paid'
-  },
-  {
-    id: '2',
-    hospitalId: 'HOS-2020-168',
-    firstName: 'Jane',
-    lastName: 'Smith',
-    email: 'jane.smith@example.com',
-    phone: '+234-7084-2920',
-    status: 'Completed',
-    location: 'Abuja, Nigeria',
-    nextDeliveryDate: '2020-09-12',
-    paymentStatus: 'paid'
-  },
-  {
-    id: '3',
-    hospitalId: 'HOS-2020-169',
-    firstName: 'Michael',
-    lastName: 'Johnson',
-    email: 'michael.j@example.com',
-    phone: '+234-7084-2920',
-    status: 'Due & Elapsed',
-    location: 'Port Harcourt, Nigeria',
-    nextDeliveryDate: '2020-09-12',
-    paymentStatus: 'pending'
-  },
-  {
-    id: '4',
-    hospitalId: 'HOS-2020-170',
-    firstName: 'Sarah',
-    lastName: 'Williams',
-    email: 'sarah.w@example.com',
-    phone: '+234-7084-2920',
-    status: 'Assigned',
-    location: 'Kano, Nigeria',
-    nextDeliveryDate: '2020-09-12',
-    paymentStatus: 'pending'
-  },
-  {
-    id: '5',
-    hospitalId: 'WH/H/929',
-    firstName: 'Michael',
-    lastName: 'Adebola',
-    email: 'michael@example.com',
-    phone: '+234-7084-2920',
-    status: 'Assigned',
-    location: 'VI Lagos',
-    nextDeliveryDate: '2020-09-12',
-    paymentStatus: 'pending'
-  }
-];
-
 export function PatientsProvider({ children }: { children: ReactNode }) {
-  const [patients, setPatients] = useState<Patient[]>(initialPatients);
+  // Initialize state from localStorage
+  const [patients, setPatients] = useState<Patient[]>(() => {
+    if (typeof window !== 'undefined') {
+      const savedPatients = localStorage.getItem('patients');
+      return savedPatients ? JSON.parse(savedPatients) : [];
+    }
+    return [];
+  });
 
-  const updatePatient = (id: string, data: Partial<Patient>) => {
-    setPatients(currentPatients =>
-      currentPatients.map(patient =>
-        patient.id === id ? { ...patient, ...data } : patient
-      )
-    );
+  // Update localStorage when patients change
+  useEffect(() => {
+    localStorage.setItem('patients', JSON.stringify(patients));
+  }, [patients]);
+
+  // Update statuses every hour
+  useEffect(() => {
+    const updateStatuses = () => {
+      setPatients(prevPatients => 
+        prevPatients.map(patient => ({
+          ...patient,
+          status: calculatePatientStatus(patient)
+        }))
+      );
+    };
+
+    const interval = setInterval(updateStatuses, 1000 * 60 * 60); // Every hour
+    updateStatuses(); // Initial update
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const addPatient = async (patient: Omit<Patient, 'prescriptions' | 'medicationHistory'>) => {
+    try {
+      const newPatient: Patient = {
+        ...patient,
+        prescriptions: [],
+        medicationHistory: []
+      };
+      setPatients(prev => [...prev, newPatient]);
+    } catch (error) {
+      throw new Error('Failed to add patient');
+    }
   };
 
-  const addPatient = (patient: Patient) => {
-    setPatients(currentPatients => [...currentPatients, patient]);
+  const renewPrescription = async (patientId: string, prescriptionId: string) => {
+    // Implement prescription renewal logic here
+    const updatedPatients = patients.map(patient => {
+      if (patient.id === patientId) {
+        const updatedPrescriptions = patient.prescriptions.map(prescription => {
+          if (prescription.id === prescriptionId) {
+            return {
+              ...prescription,
+              refillsRemaining: prescription.refillsRemaining + 3, // Example: add 3 refills
+              lastRefillDate: new Date().toISOString()
+            };
+          }
+          return prescription;
+        });
+        return { ...patient, prescriptions: updatedPrescriptions };
+      }
+      return patient;
+    });
+    setPatients(updatedPatients);
   };
 
-  const getPatient = (id: string) => {
-    return patients.find(patient => patient.id === id);
+  const value = {
+    patients,
+    addPatient,
+    renewPrescription
   };
 
   return (
-    <PatientsContext.Provider value={{ patients, updatePatient, addPatient, getPatient }}>
+    <PatientsContext.Provider value={value}>
       {children}
     </PatientsContext.Provider>
   );
@@ -120,4 +137,25 @@ export function usePatients() {
     throw new Error('usePatients must be used within a PatientsProvider');
   }
   return context;
+}
+
+// Add status check function
+export function calculatePatientStatus(patient: Patient): PatientStatus {
+  const now = new Date();
+  const nextDelivery = new Date(patient.nextDeliveryDate);
+  const daysUntilDelivery = Math.floor((nextDelivery.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (patient.missedDeliveries > 2) {
+    return 'defaulted';
+  }
+  
+  if (daysUntilDelivery <= 2) {
+    return 'critical';
+  }
+  
+  if (daysUntilDelivery <= 7) {
+    return 'pending';
+  }
+
+  return 'active';
 }

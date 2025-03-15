@@ -7,9 +7,10 @@ interface QRCodeScannerProps {
   onScan: (result: string) => void;
   onError?: (error: Error) => void;
   isScanning: boolean;
+  patientName?: string;
 }
 
-export function QRCodeScanner({ onScan, onError, isScanning }: QRCodeScannerProps) {
+export function QRCodeScanner({ onScan, onError, isScanning, patientName }: QRCodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -24,7 +25,7 @@ export function QRCodeScanner({ onScan, onError, isScanning }: QRCodeScannerProp
         if (!videoRef.current) return;
 
         const controls = await codeReader.decodeFromVideoDevice(
-          undefined, // Use default camera
+          undefined,
           videoRef.current,
           (result: Result | undefined, err?: Error) => {
             if (!mounted) return;
@@ -84,15 +85,12 @@ export function QRCodeScanner({ onScan, onError, isScanning }: QRCodeScannerProp
 
   return (
     <div className="relative w-full max-w-lg mx-auto">
-      {/* Scanner Frame */}
       <div className="relative aspect-square w-full max-w-lg border-2 border-gray-200 rounded-lg overflow-hidden">
-        {/* Video Element */}
         <video
           ref={videoRef}
           className="absolute inset-0 w-full h-full object-cover"
         />
 
-        {/* Scanning Animation */}
         {isScanning && (
           <div className="absolute inset-0">
             {/* Corner Markers */}
@@ -108,7 +106,6 @@ export function QRCodeScanner({ onScan, onError, isScanning }: QRCodeScannerProp
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <div className="bg-white p-4 rounded-lg shadow-lg max-w-xs mx-4 text-center">
@@ -124,10 +121,9 @@ export function QRCodeScanner({ onScan, onError, isScanning }: QRCodeScannerProp
         )}
       </div>
 
-      {/* Instructions */}
       <p className="mt-4 text-sm text-gray-500 text-center">
         {isScanning
-          ? 'Position the QR code within the frame to scan'
+          ? `Scan a package to assign it to ${patientName || 'patient'}`
           : 'Scanner is paused'}
       </p>
     </div>
