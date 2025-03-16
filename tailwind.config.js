@@ -27,6 +27,12 @@ module.exports = {
         'pulse': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'ping': 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite',
         'scan': 'scan 2s linear infinite',
+        'spin-slow': 'spin 3s linear infinite',
+        'ping-slow': 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',
+        'progress-slow': 'progress 3s ease-in-out infinite',
+        'progress-medium': 'progress 2.5s ease-in-out infinite',
+        'progress-fast': 'progress 2s ease-in-out infinite',
+        'gradient': 'gradient 8s linear infinite',
       },
       keyframes: {
         spin: {
@@ -46,6 +52,21 @@ module.exports = {
         scan: {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(256px)' },
+        },
+        progress: {
+          '0%': { transform: 'translateX(-100%)' },
+          '50%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(-100%)' },
+        },
+        gradient: {
+          '0%, 100%': {
+            'background-size': '200% 200%',
+            'background-position': 'left center',
+          },
+          '50%': {
+            'background-size': '200% 200%',
+            'background-position': 'right center',
+          },
         },
       },
     },
