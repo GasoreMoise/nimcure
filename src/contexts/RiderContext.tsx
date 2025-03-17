@@ -2,14 +2,21 @@
 
 import { createContext, useContext, useState, useEffect } from 'react';
 
-interface Rider {
+export type RiderStatus = 'available' | 'on_delivery' | 'offline';
+
+export interface Rider {
   id: string;
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  status: string;
+  status: RiderStatus;
   rating: number;
+  totalRatings: number;
+  ratingHistory?: {
+    rating: number;
+    date: string;
+  }[];
   totalDeliveries: number;
   successRate: number;
   vehicleType: string;
@@ -77,18 +84,31 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateRider = async (id: string, rider: Partial<Rider>) => {
+  const updateRider = async (id: string, updatedRider: Partial<Rider>) => {
     try {
       const response = await fetch(`/api/riders/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rider),
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedRider),
       });
-      if (!response.ok) throw new Error('Failed to update rider');
-      await refreshRiders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update rider');
-      throw err;
+
+      if (!response.ok) {
+        throw new Error('Failed to update rider');
+      }
+
+      // Update local state
+      setRiders(prevRiders =>
+        prevRiders.map(rider =>
+          rider.id === id ? { ...rider, ...updatedRider } : rider
+        )
+      );
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating rider:', error);
+      throw error;
     }
   };
 
@@ -108,10 +128,10 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
   return <RiderContext.Provider value={value}>{children}</RiderContext.Provider>;
 }
 
-export function useRiders() {
+export const useRiders = () => {
   const context = useContext(RiderContext);
   if (context === undefined) {
     throw new Error('useRiders must be used within a RiderProvider');
   }
-  return context;
-}
+  return { ...context, updateRider: context.updateRider };
+};

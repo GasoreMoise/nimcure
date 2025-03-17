@@ -7,7 +7,7 @@ export async function GET() {
     
     const riders = await prisma.rider.findMany({
       orderBy: {
-        createdAt: 'desc'
+        updatedAt: 'desc'
       },
       select: {
         id: true,

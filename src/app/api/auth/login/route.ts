@@ -15,8 +15,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate user
+    // Validate user and check email verification
     const user = await validateUser(body.email, body.password);
+
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { 
+          error: 'Please verify your email before logging in',
+          needsVerification: true 
+        },
+        { status: 401 }
+      );
+    }
 
     // Create auth cookie
     const cookieStore = cookies();

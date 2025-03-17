@@ -9,10 +9,20 @@ import { RiderProvider } from '@/contexts/RiderContext';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Nimcure',
-  description: 'Healthcare delivery management system',
+  title: {
+    template: '%s | Nimcure',
+    default: 'Nimcure',
+  },
+  description: 'Nimcure - Healthcare Platform',
   icons: {
-    icon: '/logo.svg',
+    icon: [
+      {
+        url: '/logo.svg',
+        href: '/logo.svg',
+        type: 'image/svg+xml',
+      }
+    ],
+    shortcut: '/logo.svg',
     apple: '/logo.svg',
   },
 };
@@ -26,7 +36,9 @@ export default function RootLayout({
     <html lang="en">
       <head />
       <body className={inter.className}>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

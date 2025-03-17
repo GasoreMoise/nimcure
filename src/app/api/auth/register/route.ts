@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
-import { createUser } from '@/lib/auth';
-import type { RegisterRequest } from '@/lib/types';
+import { hash } from 'bcrypt';
+import { prisma } from '@/lib/prisma';
+import { sendVerificationEmail } from '@/lib/email';
 
 export async function POST(request: Request) {
   try {
-    const body: RegisterRequest = await request.json();
+    const body = await request.json();
+    console.log('Registration request:', body); // Debug log
 
     // Validate required fields
     const requiredFields = ['firstName', 'lastName', 'email', 'phoneNumber', 'licenseNumber', 'password'];
     for (const field of requiredFields) {
-      if (!body[field as keyof RegisterRequest]) {
+      if (!body[field]) {
         return NextResponse.json(
           { error: `${field} is required` },
           { status: 400 }
@@ -17,23 +19,47 @@ export async function POST(request: Request) {
       }
     }
 
-    // Create user
-    const user = await createUser(body);
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: body.email }
+    });
 
-    // Return success response without setting auth cookie
-    return NextResponse.json(
-      { 
-        message: 'Registration successful. Please log in to continue.',
-        user: {
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName
-        }
-      },
-      { status: 201 }
-    );
+    if (existingUser) {
+      return NextResponse.json(
+        { error: 'Email already registered' },
+        { status: 400 }
+      );
+    }
+
+    // Create user
+    const verificationToken = crypto.randomUUID();
+    const hashedPassword = await hash(body.password, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        firstName: body.firstName,
+        lastName: body.lastName,
+        email: body.email,
+        phoneNumber: body.phoneNumber,
+        licenseNumber: body.licenseNumber,
+        password: hashedPassword,
+        verificationToken
+      }
+    });
+
+    console.log('User created:', user); // Debug log
+
+    // Send verification email
+    await sendVerificationEmail({
+      email: user.email,
+      token: verificationToken
+    });
+
+    return NextResponse.json({
+      message: 'Registration successful. Please check your email to verify your account.'
+    });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Registration error:', error); // Debug log
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Registration failed' },
       { status: 400 }

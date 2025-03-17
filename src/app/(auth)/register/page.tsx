@@ -330,11 +330,10 @@ export default function RegisterPage() {
 
           <Button
             type="submit"
-            fullWidth
-            className="h-12"
+            className="w-full h-12"
             disabled={loading}
           >
-            {loading ? 'Creating account...' : 'Create Account'}
+            {loading ? 'Registering...' : 'Create account'}
           </Button>
         </form>
 

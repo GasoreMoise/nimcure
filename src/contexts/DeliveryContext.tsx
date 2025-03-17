@@ -22,25 +22,29 @@ interface Rider {
 
 export interface Delivery {
   id: string;
-  patientId: string;
-  patientName: string;
-  patientPhone: string;
+  patientId?: string;
+  patientName?: string;
+  items: string;
   date: string;
-  items: string[];
-  status: 'pending' | 'in_progress' | 'delivered' | 'failed';
-  paymentStatus: 'paid' | 'unpaid';
+  status: 'unassigned' | 'pending' | 'in_progress' | 'delivered' | 'failed';
+  paymentStatus: 'unpaid' | 'paid';
   location: string;
   riderId: string;
   riderName: string;
-  rider?: Rider;
+  rider?: {
+    phone: string;
+    rating: number;
+    vehicleType: string;
+    successRate: number;
+  };
   notes?: string;
   createdAt: string;
   updatedAt: string;
-  tracking?: {
-    currentLocation?: { lat: number; lng: number };
+  tracking: {
     estimatedArrival: string;
     status: string;
     lastUpdated: string;
+    responseTimeout?: string;
   };
 }
 

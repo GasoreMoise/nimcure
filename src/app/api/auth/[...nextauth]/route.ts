@@ -1,35 +1,65 @@
-import NextAuth from 'next-auth';
+import NextAuth, { type NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import { prisma } from '@/lib/prisma';
+import { compare } from 'bcryptjs';
 
-const handler = NextAuth({
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: 'Credentials',
+      name: 'credentials',
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' }
       },
       async authorize(credentials) {
-        // Add your authentication logic here
-        // For demo purposes, we'll use a mock user
-        if (credentials?.email === "emmanuel@nimcure.com" && credentials?.password === "password") {
-          return {
-            id: "1",
-            name: "Emmanuel Adigwe",
-            email: "emmanuel@nimcure.com",
-            image: "/avatar.jpg"
-          };
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Invalid credentials');
         }
-        return null;
+
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email }
+        });
+
+        if (!user || !user.password) {
+          throw new Error('Invalid credentials');
+        }
+
+        const isValid = await compare(credentials.password, user.password);
+
+        if (!isValid) {
+          throw new Error('Invalid credentials');
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: `${user.firstName} ${user.lastName}`
+        };
       }
     })
   ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+      }
+      return session;
+    }
+  },
   pages: {
     signIn: '/(auth)/login',
   },
   session: {
     strategy: 'jwt',
   },
-});
+  secret: process.env.NEXTAUTH_SECRET,
+};
 
+const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };

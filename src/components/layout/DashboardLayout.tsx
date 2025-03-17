@@ -133,7 +133,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
                   <span className="ml-2 text-xl font-semibold text-gray-900">Nimcure</span>
                 </Link>
               </div>
-              <div className="hidden sm:ml-10 sm:flex sm:space-x-8"> 
+              <div className="hidden sm:ml-36 sm:mr-auto sm:flex sm:space-x-8"> 
                 {navigation.map((item) => {
                   const active = isActive(item.href);
                   return (

@@ -61,6 +61,10 @@ export async function validateUser(email: string, password: string) {
     throw new Error('Invalid email or password');
   }
 
+  if (!user.emailVerified) {
+    throw new Error('Please verify your email before logging in');
+  }
+
   const isValid = await compare(password, user.password);
   if (!isValid) {
     throw new Error('Invalid email or password');
@@ -103,4 +107,8 @@ export async function getUserByEmail(email: string) {
   });
 
   return user;
+}
+
+export async function verifyPassword(password: string, hashedPassword: string) {
+  return compare(password, hashedPassword);
 }

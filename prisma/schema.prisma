@@ -11,54 +11,70 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  firstName     String
-  lastName      String
-  phoneNumber   String
-  licenseNumber String    @unique
-  password      String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  patients      Patient[]
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  firstName         String
+  lastName          String
+  phoneNumber       String
+  licenseNumber     String    @unique
+  emailVerified     DateTime?
+  verificationToken String?
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model Delivery {
+  id            String   @id @default(cuid())
+  riderId       String?
+  rider         Rider?   @relation(fields: [riderId], references: [id])
+  paymentStatus String   // 'paid' or 'unpaid'
+  status        String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  patient       Patient  @relation(fields: [patientId], references: [id])
+  patientId     String
+  items         String   // Store as JSON string
+  location      String
+  notes         String?
+  tracking      Json    // For storing tracking information
 }
 
 model Patient {
-  id               String     @id @default(cuid())
-  hospitalId       String     @unique
-  name             String
-  phoneNumber      String
-  location         String
-  nextDeliveryDate DateTime?
-  status           String     @default("Pending")
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-  userId           String
-  user             User       @relation(fields: [userId], references: [id])
-  prescriptions    Prescription[]
-}
-
-model Prescription {
-  id          String   @id @default(cuid())
-  patientId   String
-  patient     Patient  @relation(fields: [patientId], references: [id])
-  medications Json     // Store medication details as JSON
-  status      String   @default("Pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String     @id @default(cuid())
+  name       String
+  email      String     @unique
+  phone      String
+  address    String
+  deliveries Delivery[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 }
 
 model Rider {
-  id              String    @id @default(cuid())
-  firstName       String
-  lastName        String
-  email           String    @unique
-  phone           String
-  status          String    @default("available")
-  rating          Float     @default(0)
-  totalDeliveries Int       @default(0)
-  successRate     Float     @default(0)
-  vehicleType     String
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String          @id @default(cuid())
+  firstName     String
+  lastName      String
+  email         String          @unique
+  phone         String
+  vehicleType   String
+  status        String          // 'assigned' or 'unassigned'
+  rating        Float           @default(0)
+  totalRatings  Int            @default(0)
+  successRate   Float          @default(0)
+  totalDeliveries Int          @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deliveries    Delivery[]
+  ratingHistory RatingHistory[]
+}
+
+model RatingHistory {
+  id        String   @id @default(cuid())
+  rating    Float
+  date      DateTime @default(now())
+  riderId   String
+  rider     Rider    @relation(fields: [riderId], references: [id])
 }

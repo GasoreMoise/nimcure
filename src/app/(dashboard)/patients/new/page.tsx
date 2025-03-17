@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { usePatients, Patient } from '@/contexts/PatientsContext';
+import { usePatients } from '@/contexts/PatientsContext';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 
@@ -17,15 +17,14 @@ export default function NewPatientPage() {
     lastName: '',
     email: '',
     phone: '',
-    address: '',
     hospitalId: '',
     nextDeliveryDate: '',
     drugCycle: '',
     location: '',
-    gender: '' as Patient['gender'],
+    gender: 'PreferNotToSay' as const
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -43,8 +42,7 @@ export default function NewPatientPage() {
         createdAt: new Date().toISOString(),
         paymentStatus: 'unpaid',
         address: formData.location,
-        missedDeliveries: 0,
-        location: formData.location
+        missedDeliveries: 0
       });
       
       router.push('/patients');
@@ -112,6 +110,23 @@ export default function NewPatientPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
+                  Gender
+                </label>
+                <select
+                  name="gender"
+                  value={formData.gender}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                >
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="NonBinary">Non-binary</option>
+                  <option value="PreferNotToSay">Prefer not to say</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
                   Phone Number
                 </label>
                 <Input
@@ -160,6 +175,7 @@ export default function NewPatientPage() {
                   name="nextDeliveryDate"
                   value={formData.nextDeliveryDate}
                   onChange={handleChange}
+                  required
                   className="mt-1"
                 />
               </div>
@@ -174,6 +190,7 @@ export default function NewPatientPage() {
                   value={formData.drugCycle}
                   onChange={handleChange}
                   min="1"
+                  required
                   className="mt-1"
                 />
               </div>

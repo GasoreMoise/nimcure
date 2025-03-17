@@ -4,31 +4,40 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useDeliveries } from '@/contexts/DeliveryContext';
+import { useDelivery } from '@/hooks/useDelivery';
+import { checkDeliveryStatus } from '@/utils/delivery';
+import type { Delivery } from '@/contexts/DeliveryContext';
+import { Notification } from '@/components/ui/Notification';
 
 export default function DeliveryDetailsPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { deliveries, updateDelivery } = useDeliveries();
+  const { delivery, isLoading, error } = useDelivery(params.id);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState('');
 
-  const delivery = deliveries.find(d => d.id === params.id);
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error loading delivery</div>;
+  if (!delivery) return <div>Delivery not found</div>;
 
-  if (!delivery) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-lg font-medium text-gray-900">Delivery not found</h2>
-            <Link href="/deliveries" className="mt-4 text-blue-600 hover:text-blue-800">
-              Return to deliveries
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const currentStatus = checkDeliveryStatus(delivery);
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string, paymentStatus?: string) => {
+    // For unassigned deliveries, show payment status
+    if (!delivery.patientId) {
+      switch (paymentStatus) {
+        case 'paid':
+          return 'bg-green-100 text-green-800';
+        case 'unpaid':
+          return 'bg-red-100 text-red-800';
+        default:
+          return 'bg-gray-100 text-gray-800';
+      }
+    }
+
+    // For assigned deliveries, show delivery status
     switch (status.toLowerCase()) {
       case 'delivered':
         return 'bg-green-100 text-green-800';
@@ -43,14 +52,37 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
     }
   };
 
-  const handleStatusUpdate = async (newStatus: 'pending' | 'in_progress' | 'delivered' | 'failed') => {
+  const getStatusOptions = () => {
+    if (!delivery.patientId) {
+      return ['paid', 'unpaid'];
+    }
+    return ['pending', 'in_progress', 'delivered', 'failed'];
+  };
+
+  const handleStatusUpdate = async (newStatus: Delivery['status'] | 'paid' | 'unpaid') => {
     setIsUpdating(true);
     try {
-      await updateDelivery(delivery.id, { 
-        status: newStatus,
-        updatedAt: new Date().toISOString()
-      });
+      if (newStatus === 'paid' || newStatus === 'unpaid') {
+        await updateDelivery(delivery.id, {
+          ...delivery,
+          paymentStatus: newStatus
+        });
+      } else {
+        await updateDelivery(delivery.id, {
+          ...delivery,
+          status: newStatus,
+          tracking: {
+            ...delivery.tracking,
+            status: newStatus,
+            lastUpdated: new Date().toISOString(),
+            estimatedArrival: delivery.tracking?.estimatedArrival || new Date().toISOString()
+          }
+        });
+      }
       setShowStatusDropdown(false);
+      setNotificationMessage(`Status has been successfully updated to ${newStatus.toUpperCase()}`);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 3000);
     } catch (error) {
       console.error('Failed to update status:', error);
     } finally {
@@ -58,8 +90,54 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
     }
   };
 
+  const handlePaymentUpdate = async (newStatus: 'paid' | 'unpaid') => {
+    try {
+      await updateDelivery(delivery.id, {
+        ...delivery,
+        paymentStatus: newStatus
+      });
+    } catch (error) {
+      console.error('Failed to update payment status:', error);
+    }
+  };
+
+  const renderActionButtons = () => (
+    <div className="mt-4 space-x-2">
+      {currentStatus === 'pending' && (
+        <button onClick={() => handleStatusUpdate('in_progress')}>
+          Start Delivery
+        </button>
+      )}
+      {currentStatus === 'in_progress' && (
+        <button onClick={() => handleStatusUpdate('delivered')}>
+          Mark as Delivered
+        </button>
+      )}
+      {delivery.paymentStatus === 'unpaid' && currentStatus === 'delivered' && (
+        <button onClick={() => handlePaymentUpdate('paid')}>
+          Mark as Paid
+        </button>
+      )}
+    </div>
+  );
+
+  const items = delivery.items ? 
+    (typeof delivery.items === 'string' ? 
+      JSON.parse(delivery.items) : 
+      delivery.items
+    ) : [];
+
+  // Add a type guard to ensure it's an array
+  const itemsArray = Array.isArray(items) ? items : [items];
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
+      {showNotification && (
+        <Notification
+          message={notificationMessage}
+          onClose={() => setShowNotification(false)}
+        />
+      )}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
         <div className="mb-8">
@@ -96,7 +174,7 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
                   </button>
                   {showStatusDropdown && (
                     <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                      {['pending', 'in_progress', 'delivered', 'failed'].map((status) => (
+                      {getStatusOptions().map((status) => (
                         <button
                           key={status}
                           onClick={() => handleStatusUpdate(status as any)}
@@ -122,8 +200,13 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
                   <div className="px-4 py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
                     <dt className="text-sm font-medium text-gray-500">Status</dt>
                     <dd className="mt-1 sm:col-span-2 sm:mt-0">
-                      <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(delivery.status)}`}>
-                        {delivery.status.replace('_', ' ').toUpperCase()}
+                      <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                        getStatusColor(delivery.status, delivery.paymentStatus)
+                      }`}>
+                        {!delivery.patientId 
+                          ? (delivery.paymentStatus || 'unpaid').toUpperCase()
+                          : delivery.status.replace('_', ' ').toUpperCase()
+                        }
                       </span>
                     </dd>
                   </div>
@@ -136,11 +219,11 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
                   <div className="px-4 py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
                     <dt className="text-sm font-medium text-gray-500">Items</dt>
                     <dd className="mt-1 text-sm text-gray-900 sm:col-span-2 sm:mt-0">
-                      <ul className="list-disc pl-5 space-y-1">
-                        {delivery.items.map((item, index) => (
-                          <li key={index}>{item}</li>
+                      <div>
+                        {itemsArray.map((item: string, index: number) => (
+                          <span key={index}>{item}</span>
                         ))}
-                      </ul>
+                      </div>
                     </dd>
                   </div>
                   <div className="px-4 py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
@@ -173,7 +256,9 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
                       <div className="px-4 py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
                         <dt className="text-sm font-medium text-gray-500">Name</dt>
                         <dd className="mt-1 text-sm text-gray-900 sm:col-span-2 sm:mt-0">
-                          {delivery.riderName}
+                          <Link href={`/dispatch-riders/${delivery.riderId}`} className="text-blue-600 hover:text-blue-900">
+                            {delivery.riderName}
+                          </Link>
                         </dd>
                       </div>
                       {delivery.rider && (
@@ -185,9 +270,21 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
                             </dd>
                           </div>
                           <div className="px-4 py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
+                            <dt className="text-sm font-medium text-gray-500">Vehicle Type</dt>
+                            <dd className="mt-1 text-sm text-gray-900 sm:col-span-2 sm:mt-0">
+                              {delivery.rider.vehicleType}
+                            </dd>
+                          </div>
+                          <div className="px-4 py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
                             <dt className="text-sm font-medium text-gray-500">Rating</dt>
                             <dd className="mt-1 text-sm text-gray-900 sm:col-span-2 sm:mt-0">
-                              {delivery.rider.rating} ⭐
+                              {delivery.rider.rating.toFixed(1)} ⭐
+                            </dd>
+                          </div>
+                          <div className="px-4 py-4 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
+                            <dt className="text-sm font-medium text-gray-500">Success Rate</dt>
+                            <dd className="mt-1 text-sm text-gray-900 sm:col-span-2 sm:mt-0">
+                              {delivery.rider.successRate}%
                             </dd>
                           </div>
                         </>
@@ -203,6 +300,7 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
             </div>
           </div>
         </div>
+        {renderActionButtons()}
       </div>
     </div>
   );

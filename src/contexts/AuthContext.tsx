@@ -81,17 +81,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(userData),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Registration failed');
+        throw new Error(error.error || 'Registration failed');
       }
 
-      const newUser = await response.json();
-      setUser(newUser);
+      const data = await response.json();
+      setUser(data);
       router.push('/dashboard');
     } catch (error) {
       console.error('Registration error:', error);

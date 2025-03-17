@@ -18,18 +18,43 @@ export default function LoginPage() {
     password: '',
     rememberMe: false
   });
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNeedsVerification(false);
     setLoading(true);
 
     try {
       await login(formData.email, formData.password);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Login failed');
+    } catch (error: any) {
+      if (error.needsVerification) {
+        setNeedsVerification(true);
+        setError('Please verify your email before logging in');
+      } else {
+        setError(error.message || 'Failed to login');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    try {
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email }),
+      });
+
+      if (response.ok) {
+        setError('Verification email sent. Please check your inbox.');
+      } else {
+        setError('Failed to send verification email. Please try again.');
+      }
+    } catch (error) {
+      setError('Failed to send verification email. Please try again.');
     }
   };
 
@@ -56,8 +81,16 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="p-3 text-sm text-red-500 bg-red-50 rounded-lg" role="alert">
-            {error}
+          <div className="p-3 text-sm bg-red-50 rounded-lg" role="alert">
+            <p className="text-red-500">{error}</p>
+            {needsVerification && (
+              <button
+                onClick={handleResendVerification}
+                className="mt-2 text-blue-600 hover:text-blue-500"
+              >
+                Resend verification email
+              </button>
+            )}
           </div>
         )}
 
@@ -123,8 +156,7 @@ export default function LoginPage() {
 
           <Button
             type="submit"
-            fullWidth
-            className="h-12"
+            className="w-full h-12"
             disabled={loading}
           >
             {loading ? 'Signing in...' : 'Sign in'}

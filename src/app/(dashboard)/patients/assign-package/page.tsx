@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { usePatients } from '@/contexts/PatientsContext';
 import { useRiders } from '@/contexts/RiderContext';
+import { useDeliveries } from '@/contexts/DeliveryContext';
 import { drugCycleSchema, riderAssignmentSchema } from '@/lib/validations/package.schema';
 import type { DrugCycleData, RiderAssignmentData } from '@/lib/validations/package.schema';
 import { QRCodeScanner } from '@/components/QRCodeScanner';
@@ -14,16 +15,22 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 
+type Tab = 'all' | 'unassigned' | 'assigned';
+
 export default function AssignPackagePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const patientId = searchParams.get('patientId');
   const { patients } = usePatients();
   const { riders } = useRiders();
+  const { addDelivery, deliveries } = useDeliveries();
   const [currentStep, setCurrentStep] = useState(0);
   const [scannedPackageId, setScannedPackageId] = useState<string | null>(null);
   const [assignmentStatus, setAssignmentStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<Tab>('all');
+  const [selectedRider, setSelectedRider] = useState<string | null>(null);
   
   // Get patient information from context
   const patient = patients.find(p => p.id === patientId);
@@ -127,162 +134,88 @@ export default function AssignPackagePage() {
   const renderRiderAssignmentForm = () => (
     <div className="lg:col-span-2">
       <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-6">Assign Dispatch Rider</h2>
-        <form onSubmit={riderForm.handleSubmit(handleRiderAssignment)} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Select Rider
-            </label>
-            <select
-              {...riderForm.register('riderId')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+        {/* Tabs Navigation */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setSelectedTab('all')}
+              className={`${
+                selectedTab === 'all'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
-              <option value="">Select a rider...</option>
-              {riders?.map(rider => (
-                <option key={rider.id} value={rider.id}>
-                  {rider.name}
-                </option>
-              ))}
-            </select>
-            {riderForm.formState.errors.riderId && (
-              <p className="mt-1 text-sm text-red-600">
-                {riderForm.formState.errors.riderId.message}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Delivery Date
-            </label>
-            <Input
-              type="date"
-              {...riderForm.register('deliveryDate')}
-              className="mt-1"
-            />
-            {riderForm.formState.errors.deliveryDate && (
-              <p className="mt-1 text-sm text-red-600">
-                {riderForm.formState.errors.deliveryDate.message}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Delivery Time
-            </label>
-            <Input
-              type="time"
-              {...riderForm.register('deliveryTime')}
-              className="mt-1"
-            />
-            {riderForm.formState.errors.deliveryTime && (
-              <p className="mt-1 text-sm text-red-600">
-                {riderForm.formState.errors.deliveryTime.message}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Special Instructions
-            </label>
-            <textarea
-              {...riderForm.register('specialInstructions')}
-              rows={3}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-            />
-          </div>
-
-          <div className="flex justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCurrentStep(0)}
+              All ({riders.length})
+            </button>
+            <button
+              onClick={() => setSelectedTab('unassigned')}
+              className={`${
+                selectedTab === 'unassigned'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
-              Back
-            </Button>
-            <Button type="submit">
-              Continue to Package Scanning
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+              Unassigned Riders ({riders.filter(r => getRiderDeliveries(r.id).pending === 0).length})
+            </button>
+            <button
+              onClick={() => setSelectedTab('assigned')}
+              className={`${
+                selectedTab === 'assigned'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+            >
+              Assigned Riders ({riders.filter(r => getRiderDeliveries(r.id).pending > 0).length})
+            </button>
+          </nav>
+        </div>
 
-  const renderPackageScanning = () => (
-    <div className="lg:col-span-2">
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-6">
-          Scan a package to assign it to {patient.firstName} {patient.lastName}
-        </h2>
-        
-        <div className="space-y-6">
-          <div className="flex justify-center">
-            <QRCodeScanner
-              onScan={handleScanSuccess}
-              onError={(error) => setError(error.message)}
-              isScanning={!scannedPackageId}
-              patientName={`${patient.firstName} ${patient.lastName}`}
-            />
-          </div>
-
-          {/* Manual Entry Option */}
-          <div className="mt-8">
-            <p className="text-sm text-gray-500 mb-2">
-              Trouble scanning QR Code?
-              <br />
-              Enter manually
-            </p>
-            <div className="flex items-center space-x-4">
-              <div className="flex-1">
-                <Input
-                  type="text"
-                  placeholder="Enter Code"
-                  value={manualCode}
-                  onChange={(e) => setManualCode(e.target.value)}
-                  className="w-full"
-                />
+        {/* Riders List */}
+        <div className="space-y-4">
+          {filteredRiders.map(rider => (
+            <div 
+              key={rider.id}
+              className="flex items-center p-4 border rounded-lg hover:bg-gray-50"
+            >
+              <input
+                type="radio"
+                name="rider"
+                value={rider.id}
+                checked={selectedRider === rider.id}
+                onChange={() => setSelectedRider(rider.id)}
+                className="h-4 w-4 text-blue-600 border-gray-300"
+              />
+              <div className="ml-4 flex-1 grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Dispatch Rider's Name</p>
+                  <p className="text-sm text-gray-500">{rider.firstName} {rider.lastName}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Phone Number</p>
+                  <p className="text-sm text-gray-500">{rider.phone}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Number of Deliveries</p>
+                  <p className="text-sm text-gray-500">
+                    {selectedTab === 'assigned' 
+                      ? `${getRiderDeliveries(rider.id).pending} Pending Deliveries`
+                      : `${rider.totalDeliveries} Deliveries`}
+                  </p>
+                </div>
               </div>
-              <span className="text-sm text-gray-500">OR</span>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-blue-600 text-blue-600"
-                onClick={() => handleScanSuccess(manualCode)}
-              >
-                Submit Code
-              </Button>
             </div>
-          </div>
+          ))}
+        </div>
 
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
-
-          {/* Bottom Actions */}
-          <div className="flex justify-between mt-8">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCurrentStep(1)}
-              className="px-8"
-            >
-              Back
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              onClick={() => handleScanSuccess(scannedPackageId || manualCode)}
-              disabled={!scannedPackageId && !manualCode}
-              className="bg-blue-100 text-blue-600 hover:bg-blue-200 px-8"
-            >
-              Assign Package
-            </Button>
-          </div>
+        {/* Next Button */}
+        <div className="mt-6 flex justify-end">
+          <Button
+            onClick={() => setCurrentStep(2)}
+            disabled={!selectedRider}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+          >
+            Next
+          </Button>
         </div>
       </div>
     </div>
@@ -294,6 +227,100 @@ export default function AssignPackagePage() {
   // Add state for modal
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [packageToAssign, setPackageToAssign] = useState<string | null>(null);
+
+  const availableRiders = riders.filter(rider => rider.status === 'available');
+
+  const [formData, setFormData] = useState({
+    patientId: '',
+    riderId: '',
+    items: [''],
+    notes: '',
+    deliveryDate: ''
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const selectedPatient = patients.find(p => p.id === formData.patientId);
+      if (!selectedPatient) throw new Error('Patient not found');
+
+      const selectedRider = riders.find(r => r.id === formData.riderId);
+      if (!selectedRider) throw new Error('Rider not found');
+
+      const newDelivery = {
+        id: Math.random().toString(36).substr(2, 9),
+        patientId: selectedPatient.id,
+        patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+        patientPhone: selectedPatient.phone,
+        date: formData.deliveryDate,
+        items: JSON.stringify(formData.items.filter(item => item.trim() !== '')),
+        status: 'pending' as const,
+        paymentStatus: 'unpaid' as const,
+        location: selectedPatient.location,
+        riderId: selectedRider.id,
+        riderName: `${selectedRider.firstName} ${selectedRider.lastName}`,
+        deliveryType: 'patient-assigned' as const,
+        notes: formData.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tracking: {
+          estimatedArrival: new Date(formData.deliveryDate).toISOString(),
+          status: 'pending',
+          lastUpdated: new Date().toISOString(),
+          responseTimeout: new Date(
+            new Date(formData.deliveryDate).getTime() + 24 * 60 * 60 * 1000
+          ).toISOString() // 24 hours timeout
+        }
+      };
+
+      await addDelivery(newDelivery);
+      router.push('/deliveries');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign package');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Get rider delivery counts
+  const getRiderDeliveries = (riderId: string) => {
+    const riderDeliveries = deliveries.filter(d => d.riderId === riderId);
+    return {
+      total: riderDeliveries.length,
+      pending: riderDeliveries.filter(d => d.status !== 'delivered').length,
+      completed: riderDeliveries.filter(d => d.status === 'delivered').length
+    };
+  };
+
+  // Filter riders based on tab
+  const getFilteredRiders = () => {
+    return riders.filter(rider => {
+      const deliveryCounts = getRiderDeliveries(rider.id);
+      
+      switch (selectedTab) {
+        case 'unassigned':
+          return deliveryCounts.pending === 0;
+        case 'assigned':
+          return deliveryCounts.pending > 0;
+        default:
+          return true;
+      }
+    });
+  };
+
+  const filteredRiders = getFilteredRiders();
+
+  const renderPackageScanning = () => (
+    <div className="lg:col-span-2">
+      <div className="bg-white shadow rounded-lg p-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-6">Scan Package</h2>
+        <QRCodeScanner onScan={handleScanSuccess} />
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 py-6">

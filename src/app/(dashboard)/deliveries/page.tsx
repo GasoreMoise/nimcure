@@ -2,22 +2,46 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useDeliveries } from '@/contexts/DeliveryContext';
+import { usePatients } from '@/contexts/PatientsContext';
+import { useRiders } from '@/contexts/RiderContext';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 
 export default function DeliveriesPage() {
-  const { deliveries } = useDeliveries();
+  const router = useRouter();
+  const { deliveries, addDelivery, updateDelivery } = useDeliveries();
+  const { patients } = usePatients();
+  const { riders } = useRiders();
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState('Package Code');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeStatus, setActiveStatus] = useState('all');
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [paymentFilter, setPaymentFilter] = useState<string>('all');
+
+  const availableRiders = riders.filter(rider => rider.status === 'available');
+
+  const [formData, setFormData] = useState({
+    riderId: '',
+    items: [''],
+    location: '',
+    deliveryDate: '',
+    notes: ''
+  });
 
   // Calculate real-time counts for the sidebar
   const statusCounts = {
     unassigned: {
-      paid: deliveries.filter(d => !d.riderId && d.paymentStatus === 'paid').length,
-      unpaid: deliveries.filter(d => !d.riderId && d.paymentStatus === 'unpaid').length,
+      paid: deliveries.filter(d => !d.patientId && d.paymentStatus === 'paid').length,
+      unpaid: deliveries.filter(d => !d.patientId && d.paymentStatus === 'unpaid').length,
     },
     assigned: {
-      pending: deliveries.filter(d => d.riderId && d.status === 'pending').length,
+      pending: deliveries.filter(d => d.patientId && d.status === 'pending').length,
       inProgress: deliveries.filter(d => d.status === 'in_progress').length,
       delivered: deliveries.filter(d => d.status === 'delivered').length,
       failed: deliveries.filter(d => d.status === 'failed').length,
@@ -39,21 +63,105 @@ export default function DeliveriesPage() {
     }
   };
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleItemChange = (index: number, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) => (i === index ? value : item))
+    }));
+  };
+
+  const handleAddItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      items: [...prev.items, '']
+    }));
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleNewDelivery = () => {
+    if (availableRiders.length === 0) {
+      alert('No Available Dispatch Riders. Please try again later.');
+      return;
+    }
+    setIsAddModalOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.riderId) {
+      setError('Please select a dispatch rider');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const selectedRider = riders.find(r => r.id === formData.riderId);
+      if (!selectedRider) throw new Error('Selected rider not found');
+
+      const newDelivery = {
+        id: Math.random().toString(36).substr(2, 9),
+        date: formData.deliveryDate,
+        items: formData.items.filter(item => item.trim() !== ''),
+        status: 'unassigned' as const,
+        paymentStatus: 'unpaid' as const,
+        location: formData.location,
+        riderId: selectedRider.id,
+        riderName: `${selectedRider.firstName} ${selectedRider.lastName}`,
+        notes: formData.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tracking: {
+          estimatedArrival: new Date(formData.deliveryDate).toISOString(),
+          status: 'unassigned',
+          lastUpdated: new Date().toISOString()
+        }
+      };
+
+      await addDelivery(newDelivery);
+      setIsAddModalOpen(false);
+      // Reset form
+      setFormData({
+        riderId: '',
+        items: [''],
+        location: '',
+        deliveryDate: '',
+        notes: ''
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create delivery');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Filter deliveries based on search and active status
   const filteredDeliveries = deliveries.filter(delivery => {
     // Search filter
     const matchesSearch = 
       delivery.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      delivery.patientName.toLowerCase().includes(searchTerm.toLowerCase());
+      (delivery.patientName?.toLowerCase() || '').includes(searchTerm.toLowerCase());
 
     // Status filter
     switch (activeStatus) {
       case 'paid':
-        return matchesSearch && !delivery.riderId && delivery.paymentStatus === 'paid';
+        return matchesSearch && !delivery.patientId && delivery.paymentStatus === 'paid';
       case 'unpaid':
-        return matchesSearch && !delivery.riderId && delivery.paymentStatus === 'unpaid';
+        return matchesSearch && !delivery.patientId && delivery.paymentStatus === 'unpaid';
       case 'pending':
-        return matchesSearch && delivery.riderId && delivery.status === 'pending';
+        return matchesSearch && delivery.patientId && delivery.status === 'pending';
       case 'in_progress':
         return matchesSearch && delivery.status === 'in_progress';
       case 'delivered':
@@ -66,17 +174,30 @@ export default function DeliveriesPage() {
     }
   });
 
+  const sortedDeliveries = [...filteredDeliveries].sort((a, b) => {
+    switch (sortBy) {
+      case "Package Code":
+        return (a.id || '').localeCompare(b.id || '');
+      case "Delivery Date":
+        return a.date.localeCompare(b.date);
+      case "Patient Name":
+        return (a.patientName || '').localeCompare(b.patientName || '');
+      default:
+        return 0;
+    }
+  });
+
   return (
     <div className="min-h-screen bg-gray-50 py-6">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-gray-900">Deliveries</h1>
-          <Link
-            href="/deliveries/new"
+          <Button
+            onClick={handleNewDelivery}
             className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             + New Delivery
-          </Link>
+          </Button>
         </div>
 
         <div className="flex justify-between items-center mb-6">
@@ -196,18 +317,18 @@ export default function DeliveriesPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead>
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Package Code</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Delivery Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 ">Package Code</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 ">Delivery Date</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 ">Patient Name</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 ">Status</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium text-gray-500 ">Location</th>
                       <th className="relative px-6 py-3">
                         <span className="sr-only">Actions</span>
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredDeliveries.map((delivery) => (
+                    {sortedDeliveries.map((delivery) => (
                       <tr key={delivery.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{delivery.id}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -246,6 +367,127 @@ export default function DeliveriesPage() {
             </div>
           </div>
         </div>
+
+        <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
+            <h2 className="text-lg font-medium mb-4">Create New Delivery</h2>
+            
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="bg-red-50 text-red-500 p-3 rounded-md text-sm">
+                  {error}
+                </div>
+              )}
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Select Dispatch Rider*
+                  </label>
+                  <select
+                    value={formData.riderId}
+                    onChange={(e) => setFormData(prev => ({ ...prev, riderId: e.target.value }))}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    required
+                  >
+                    <option value="">Choose a rider...</option>
+                    {availableRiders.map(rider => (
+                      <option key={rider.id} value={rider.id}>
+                        {rider.firstName} {rider.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Delivery Items*
+                  </label>
+                  {formData.items.map((item, index) => (
+                    <div key={index} className="flex gap-2 mb-2">
+                      <Input
+                        type="text"
+                        value={item}
+                        onChange={(e) => handleItemChange(index, e.target.value)}
+                        placeholder="Enter item description"
+                        required
+                      />
+                      {index > 0 && (
+                        <Button 
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleRemoveItem(index)}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddItem}
+                  >
+                    Add Item
+                  </Button>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Delivery Location*
+                  </label>
+                  <Input
+                    type="text"
+                    value={formData.location}
+                    onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+                    placeholder="Enter delivery location"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Delivery Date*
+                  </label>
+                  <Input
+                    type="date"
+                    value={formData.deliveryDate}
+                    onChange={(e) => setFormData(prev => ({ ...prev, deliveryDate: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes (Optional)
+                  </label>
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-4 mt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAddModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Creating Delivery...' : 'Create Delivery'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </Modal>
       </div>
     </div>
   );
