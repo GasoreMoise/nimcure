@@ -9,6 +9,7 @@ import { useRiders } from '@/contexts/RiderContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { generateQRCode } from '@/utils/delivery';
 
 export default function DeliveriesPage() {
   const router = useRouter();
@@ -111,10 +112,15 @@ export default function DeliveriesPage() {
       const selectedRider = riders.find(r => r.id === formData.riderId);
       if (!selectedRider) throw new Error('Selected rider not found');
 
+      const packageCode = `PKG-${Math.random().toString(36).substr(2, 9)}`;
+      const qrCode = await generateQRCode(packageCode);
+
       const newDelivery = {
         id: Math.random().toString(36).substr(2, 9),
+        packageCode,
+        qrCode,
         date: formData.deliveryDate,
-        items: formData.items.filter(item => item.trim() !== ''),
+        items: JSON.stringify(formData.items.filter(item => item.trim() !== '')),
         status: 'unassigned' as const,
         paymentStatus: 'unpaid' as const,
         location: formData.location,

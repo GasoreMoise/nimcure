@@ -1,7 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
-import { Result } from '@zxing/library';
-import { LoadingSpinner } from './LoadingSpinner';
+import { useRef, useEffect, useCallback } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface QRCodeScannerProps {
   onScan: (result: string) => void;
@@ -11,119 +9,93 @@ interface QRCodeScannerProps {
 }
 
 export function QRCodeScanner({ onScan, onError, isScanning, patientName }: QRCodeScannerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
-  const controlsRef = useRef<IScannerControls | null>(null);
+  const videoRef = useRef<HTMLDivElement>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+
+  const stopScanner = useCallback(async () => {
+    try {
+      if (scannerRef.current?.isScanning) {
+        await scannerRef.current.stop();
+        scannerRef.current = null;
+      }
+      
+      // Force stop all video tracks
+      const tracks = await navigator.mediaDevices.getUserMedia({ video: true });
+      tracks.getTracks().forEach(track => track.stop());
+      
+      // Clear any remaining video elements
+      const videos = document.querySelectorAll('video');
+      videos.forEach(video => {
+        if (video.srcObject) {
+          const stream = video.srcObject as MediaStream;
+          stream.getTracks().forEach(track => track.stop());
+          video.srcObject = null;
+        }
+      });
+    } catch (err) {
+      console.error('Error stopping scanner:', err);
+    }
+  }, []);
 
   useEffect(() => {
-    let mounted = true;
-    const codeReader = new BrowserQRCodeReader();
+    if (!isScanning) {
+      stopScanner();
+      return;
+    }
 
-    const startScanning = async () => {
+    const startScanner = async () => {
       try {
-        if (!videoRef.current) return;
-
-        const controls = await codeReader.decodeFromVideoDevice(
-          undefined,
-          videoRef.current,
-          (result: Result | undefined, err?: Error) => {
-            if (!mounted) return;
-
-            if (err) {
-              setError(err.message);
-              onError?.(err);
-              return;
-            }
-
-            if (result) {
-              const text = result.getText();
-              onScan(text);
+        await stopScanner(); // Ensure clean state
+        if (!scannerRef.current) {
+          scannerRef.current = new Html5Qrcode('qr-reader');
+        }
+        
+        await scannerRef.current.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            disableFlip: false,
+          },
+          onScan,
+          (error) => {
+            if (!error.includes('NotFoundException')) {
+              console.error(error);
+              onError?.(new Error(error));
             }
           }
         );
-
-        controlsRef.current = controls;
-        setIsInitializing(false);
       } catch (err) {
-        if (!mounted) return;
-        const error = err instanceof Error ? err : new Error('Failed to start scanner');
-        setError(error.message);
-        onError?.(error);
-        setIsInitializing(false);
+        console.error('Failed to start scanner:', err);
+        onError?.(err as Error);
       }
     };
 
-    if (isScanning) {
-      startScanning();
-    } else if (controlsRef.current) {
-      controlsRef.current.stop();
-      controlsRef.current = null;
-    }
+    startScanner();
 
     return () => {
-      mounted = false;
-      if (controlsRef.current) {
-        controlsRef.current.stop();
-        controlsRef.current = null;
-      }
+      stopScanner();
     };
-  }, [isScanning, onScan, onError]);
+  }, [isScanning, onScan, onError, stopScanner]);
 
-  if (isInitializing) {
-    return (
-      <div className="relative w-full max-w-lg mx-auto">
-        <div className="relative aspect-square w-full max-w-lg border-2 border-gray-200 rounded-lg overflow-hidden bg-gray-50">
-          <LoadingSpinner size="lg" showText={false} />
-        </div>
-        <p className="mt-4 text-sm text-gray-500 text-center">
-          Initializing camera...
-        </p>
-      </div>
-    );
-  }
+  // Additional cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopScanner();
+    };
+  }, [stopScanner]);
 
   return (
-    <div className="relative w-full max-w-lg mx-auto">
-      <div className="relative aspect-square w-full max-w-lg border-2 border-gray-200 rounded-lg overflow-hidden">
-        <video
-          ref={videoRef}
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-
-        {isScanning && (
-          <div className="absolute inset-0">
-            {/* Corner Markers */}
-            <div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-blue-500" />
-            <div className="absolute top-0 right-0 w-16 h-16 border-t-4 border-r-4 border-blue-500" />
-            <div className="absolute bottom-0 left-0 w-16 h-16 border-b-4 border-l-4 border-blue-500" />
-            <div className="absolute bottom-0 right-0 w-16 h-16 border-b-4 border-r-4 border-blue-500" />
-
-            {/* Scanning Line */}
-            <div className="absolute inset-0 overflow-hidden">
-              <div className="h-1 w-full bg-blue-500/50 animate-scan" />
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="bg-white p-4 rounded-lg shadow-lg max-w-xs mx-4 text-center">
-              <p className="text-red-600 text-sm">{error}</p>
-              <button
-                onClick={() => setError(null)}
-                className="mt-2 text-sm text-blue-600 hover:text-blue-500"
-              >
-                Try Again
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
+    <div className="w-full max-w-sm mx-auto">
+      <div 
+        id="qr-reader" 
+        ref={videoRef}
+        className="w-full aspect-square bg-gray-100 rounded-lg overflow-hidden"
+      />
       <p className="mt-4 text-sm text-gray-500 text-center">
         {isScanning
-          ? `Scan a package to assign it to ${patientName || 'patient'}`
+          ? `Position QR code in the center of the camera view`
           : 'Scanner is paused'}
       </p>
     </div>

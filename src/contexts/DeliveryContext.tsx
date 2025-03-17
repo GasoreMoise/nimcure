@@ -22,6 +22,8 @@ interface Rider {
 
 export interface Delivery {
   id: string;
+  packageCode: string;
+  qrCode?: string;
   patientId?: string;
   patientName?: string;
   items: string;
@@ -82,17 +84,17 @@ export function DeliveryProvider({ children }: { children: React.ReactNode }) {
   }, [deliveries]);
 
   const addDelivery = async (delivery: Delivery) => {
-    const newDelivery = {
-      ...delivery,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    
-    setDeliveries(prev => {
-      const updated = [...prev, newDelivery];
-      localStorage.setItem('deliveries', JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      setDeliveries(prevDeliveries => {
+        // Remove old delivery if exists
+        const filtered = prevDeliveries.filter(d => d.id !== delivery.id);
+        // Add updated delivery
+        return [...filtered, delivery];
+      });
+    } catch (error) {
+      console.error('Failed to update delivery:', error);
+      throw error;
+    }
   };
 
   const updateDelivery = async (id: string, updates: Partial<Delivery>) => {

@@ -1,4 +1,5 @@
 import { Delivery } from '@/contexts/DeliveryContext';
+import QRCode from 'qrcode';
 
 export function checkDeliveryStatus(delivery: Delivery): Delivery['status'] {
   if (!delivery.tracking) return delivery.status;
@@ -29,4 +30,13 @@ export function getDeliveryStatusColor(status: Delivery['status']): string {
   };
 
   return colors[status] || colors.pending;
+}
+
+export async function generateQRCode(packageId: string): Promise<string> {
+  try {
+    return await QRCode.toDataURL(packageId);
+  } catch (error) {
+    console.error('Error generating QR code:', error);
+    throw error;
+  }
 } 

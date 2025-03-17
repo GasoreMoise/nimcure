@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRiders } from '@/contexts/RiderContext';
-import { useDeliveries } from '@/contexts/DeliveryContext';
+import { useDeliveries, type Delivery } from '@/contexts/DeliveryContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { generateQRCode } from '@/utils/delivery';
+import { Modal } from '@/components/ui/Modal';
 
 export default function NewDeliveryPage() {
   const router = useRouter();
@@ -13,6 +15,8 @@ export default function NewDeliveryPage() {
   const { addDelivery } = useDeliveries();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showQRCode, setShowQRCode] = useState(false);
+  const [generatedDelivery, setGeneratedDelivery] = useState<Delivery | null>(null);
 
   const availableRiders = riders.filter(rider => rider.status === 'available');
 
@@ -54,8 +58,13 @@ export default function NewDeliveryPage() {
       const selectedRider = riders.find(r => r.id === formData.riderId);
       if (!selectedRider) throw new Error('Selected rider not found');
 
+      const packageCode = `PKG-${Math.random().toString(36).substr(2, 9)}`;
+      const qrCode = await generateQRCode(packageCode);
+
       const newDelivery = {
         id: Math.random().toString(36).substr(2, 9),
+        packageCode,
+        qrCode,
         date: formData.deliveryDate,
         items: JSON.stringify(formData.items.filter(item => item.trim() !== '')),
         status: 'unassigned' as const,
@@ -74,7 +83,8 @@ export default function NewDeliveryPage() {
       };
 
       await addDelivery(newDelivery);
-      router.push('/deliveries');
+      setGeneratedDelivery(newDelivery);
+      setShowQRCode(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create delivery');
     } finally {
@@ -82,9 +92,29 @@ export default function NewDeliveryPage() {
     }
   };
 
+  const handlePrintQR = () => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow && generatedDelivery) {
+      printWindow.document.write(`
+        <html>
+          <head><title>Package QR Code</title></head>
+          <body>
+            <div style="text-align: center;">
+              <h2>Package: ${generatedDelivery.packageCode}</h2>
+              <img src="${generatedDelivery.qrCode}" style="width: 200px; height: 200px;"/>
+              <p>Created: ${new Date(generatedDelivery.createdAt).toLocaleDateString()}</p>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  };
+
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-semibold mb-6">Create New Delivery</h1>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Create New Delivery</h1>
       
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
@@ -210,6 +240,42 @@ export default function NewDeliveryPage() {
           </Button>
         </div>
       </form>
+
+      {/* QR Code Modal */}
+      <Modal
+        isOpen={showQRCode}
+        onClose={() => {
+          setShowQRCode(false);
+          router.push('/deliveries');
+        }}
+      >
+        <div className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Package Created Successfully</h2>
+          {generatedDelivery && (
+            <div className="text-center">
+              <p className="mb-4">Package Code: {generatedDelivery.packageCode}</p>
+              <img 
+                src={generatedDelivery.qrCode} 
+                alt="Package QR Code"
+                className="mx-auto w-48 h-48 mb-4"
+              />
+              <div className="flex justify-center gap-4">
+                <Button onClick={handlePrintQR}>
+                  Print QR Code
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowQRCode(false);
+                    router.push('/deliveries');
+                  }}
+                >
+                  Continue
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

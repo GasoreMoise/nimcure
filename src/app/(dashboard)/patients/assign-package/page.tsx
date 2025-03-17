@@ -14,6 +14,8 @@ import { QRCodeScanner } from '@/components/QRCodeScanner';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { toast } from 'react-hot-toast';
+import { generateQRCode } from '@/utils/delivery';
 
 type Tab = 'all' | 'unassigned' | 'assigned';
 
@@ -31,6 +33,7 @@ export default function AssignPackagePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedTab, setSelectedTab] = useState<Tab>('all');
   const [selectedRider, setSelectedRider] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
   
   // Get patient information from context
   const patient = patients.find(p => p.id === patientId);
@@ -41,6 +44,18 @@ export default function AssignPackagePage() {
       router.push('/patients');
     }
   }, [patientId, patient, router]);
+
+  useEffect(() => {
+    if (currentStep === 2) {
+      setIsScanning(true);
+    } else {
+      setIsScanning(false);
+    }
+
+    return () => {
+      setIsScanning(false);
+    };
+  }, [currentStep]);
 
   if (!patient) return null;
 
@@ -107,6 +122,8 @@ export default function AssignPackagePage() {
   };
 
   const handleScanSuccess = (packageId: string) => {
+    setIsScanning(false);
+    setError(null);
     setPackageToAssign(packageId);
     setShowConfirmModal(true);
   };
@@ -116,15 +133,45 @@ export default function AssignPackagePage() {
       setError(null);
       setAssignmentStatus('loading');
       
-      // Here you would make your API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Find the delivery to update
+      const deliveryToUpdate = deliveries.find(d => d.id === packageToAssign);
+      
+      if (!deliveryToUpdate) {
+        throw new Error('Package not found');
+      }
+
+      // Create updated delivery object
+      const updatedDelivery = {
+        ...deliveryToUpdate,
+        packageCode: deliveryToUpdate.packageCode,
+        qrCode: deliveryToUpdate.qrCode,
+        patientId: patient.id,
+        patientName: `${patient.firstName} ${patient.lastName}`,
+        status: 'pending' as const,
+        riderId: selectedRider || deliveryToUpdate.riderId,
+        assignedAt: new Date().toISOString(),
+        tracking: {
+          status: 'pending',
+          lastUpdated: new Date().toISOString(),
+          location: patient.location,
+          estimatedArrival: new Date().toISOString(),
+          history: [{
+            status: 'pending',
+            timestamp: new Date().toISOString(),
+            note: 'Package assigned to patient'
+          }]
+        }
+      };
+
+      // Update the delivery in context/storage
+      await addDelivery(updatedDelivery);
       
       setAssignmentStatus('success');
       setShowConfirmModal(false);
       
-      setTimeout(() => {
-        router.push(`/patients/${patient.id}`);
-      }, 2000);
+      // Show success message and redirect
+      toast.success('Package successfully assigned to patient');
+      router.push('/deliveries');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to assign package');
       setAssignmentStatus('error');
@@ -250,8 +297,13 @@ export default function AssignPackagePage() {
       const selectedRider = riders.find(r => r.id === formData.riderId);
       if (!selectedRider) throw new Error('Rider not found');
 
+      const packageCode = `PKG-${Math.random().toString(36).substr(2, 9)}`;
+      const qrCode = await generateQRCode(packageCode);
+
       const newDelivery = {
         id: Math.random().toString(36).substr(2, 9),
+        packageCode,
+        qrCode,
         patientId: selectedPatient.id,
         patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
         patientPhone: selectedPatient.phone,
@@ -269,10 +321,7 @@ export default function AssignPackagePage() {
         tracking: {
           estimatedArrival: new Date(formData.deliveryDate).toISOString(),
           status: 'pending',
-          lastUpdated: new Date().toISOString(),
-          responseTimeout: new Date(
-            new Date(formData.deliveryDate).getTime() + 24 * 60 * 60 * 1000
-          ).toISOString() // 24 hours timeout
+          lastUpdated: new Date().toISOString()
         }
       };
 
@@ -316,11 +365,123 @@ export default function AssignPackagePage() {
   const renderPackageScanning = () => (
     <div className="lg:col-span-2">
       <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-6">Scan Package</h2>
-        <QRCodeScanner onScan={handleScanSuccess} />
+        <h2 className="text-2xl font-semibold mb-6">Scan Package</h2>
+        
+        {/* Package Assignment Message */}
+        <p className="text-gray-600 mb-8">
+          Scan a package to assign it to {patient.firstName} {patient.lastName}
+        </p>
+
+        {/* QR Scanner */}
+        <div className="mb-8">
+          <QRCodeScanner 
+            onScan={(result) => {
+              if (validatePackage(result)) {
+                handleScanSuccess(result);
+              }
+            }}
+            onError={(error) => {
+              setError(error.message);
+            }}
+            isScanning={isScanning}
+            patientName={`${patient.firstName} ${patient.lastName}`}
+          />
+        </div>
+
+        {/* Manual Entry Section */}
+        <div className="mt-8">
+          <p className="text-sm font-medium text-gray-700 mb-2">
+            Trouble scanning QR Code?
+          </p>
+          <p className="text-sm text-gray-600 mb-4">
+            Enter manually
+          </p>
+          <div className="flex gap-4">
+            <Input
+              value={manualPackageCode}
+              onChange={(e) => setManualPackageCode(e.target.value)}
+              placeholder="Enter Code"
+              className="flex-1"
+            />
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!manualPackageCode.trim()) {
+                  setError('Please enter a package code');
+                  return;
+                }
+                
+                if (validatePackage(manualPackageCode)) {
+                  handleScanSuccess(manualPackageCode);
+                }
+              }}
+              className="whitespace-nowrap"
+            >
+              Submit Code
+            </Button>
+          </div>
+        </div>
+
+        {/* Navigation Buttons */}
+        <div className="flex justify-between mt-8">
+          <Button
+            variant="outline"
+            onClick={() => setCurrentStep(1)}
+          >
+            Back
+          </Button>
+          <Button
+            onClick={() => {
+              if (validatePackage(manualPackageCode)) {
+                handleScanSuccess(manualPackageCode);
+              }
+            }}
+            className="bg-blue-600 text-white"
+          >
+            Assign Package
+          </Button>
+        </div>
+
+        {error && (
+          <p className="mt-4 text-sm text-red-600">{error}</p>
+        )}
       </div>
     </div>
   );
+
+  // Add state for manual package code entry
+  const [manualPackageCode, setManualPackageCode] = useState('');
+
+  const validatePackage = (packageId: string) => {
+    const delivery = deliveries.find(d => 
+      d.packageCode === packageId || 
+      d.id === packageId
+    );
+    
+    if (!delivery) {
+      setError('Package not found');
+      return false;
+    }
+
+    if (delivery.paymentStatus !== 'paid') {
+      setError('Package must be paid before assignment');
+      return false;
+    }
+
+    if (delivery.patientId || delivery.status !== 'unassigned') {
+      setError('Package is already assigned');
+      return false;
+    }
+
+    return true;
+  };
+
+  // Add this effect for component unmount
+  useEffect(() => {
+    return () => {
+      setIsScanning(false);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 py-6">
