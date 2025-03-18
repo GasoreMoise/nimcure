@@ -7,9 +7,9 @@ import { useDeliveries } from '@/contexts/DeliveryContext';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { formatDistanceToNow } from 'date-fns';
-import { PrescriptionRenewalForm } from '@/components/PrescriptionRenewalForm';
-import { PrescriptionHistory } from '@/components/PrescriptionHistory';
 import { PatientStatusBadge } from '@/components/PatientStatusBadge';
+import { toast } from 'react-hot-toast';
+import { Button } from '@/components/ui/Button';
 
 interface TabProps {
   label: string;
@@ -51,22 +51,19 @@ interface Tracking {
 }
 
 interface Rider {
-  id: string;
-  name: string;
-  avatar?: string;
-  rating: number;
-  totalDeliveries: number;
   phone: string;
-  email: string;
-  isActive: boolean;
-  currentLocation?: Location;
+  rating: number;
+  vehicleType: string;
+  successRate: number;
+  name: string;
+  totalDeliveries: number;
 }
 
 interface Delivery {
   id: string;
   date: string;
   items: string[];
-  status: 'pending' | 'in_progress' | 'delivered' | 'failed';
+  status: 'pending' | 'in_progress' | 'delivered' | 'failed' | 'unassigned';
   rider: Rider;
   tracking?: Tracking;
 }
@@ -91,24 +88,7 @@ const navigationItems = [
       <path d="M3.33333 15.8333C4.71405 15.8333 5.83333 14.714 5.83333 13.3333C5.83333 11.9526 4.71405 10.8333 3.33333 10.8333C1.95262 10.8333 0.833336 11.9526 0.833336 13.3333C0.833336 14.714 1.95262 15.8333 3.33333 15.8333Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M16.6667 15.8333C18.0474 15.8333 19.1667 14.714 19.1667 13.3333C19.1667 11.9526 18.0474 10.8333 16.6667 10.8333C15.286 10.8333 14.1667 11.9526 14.1667 13.3333C14.1667 14.714 15.286 15.8333 16.6667 15.8333Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
-  )},
-  { 
-    id: 'prescriptions', 
-    label: 'Prescriptions', 
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-      </svg>
-    )
-  },
-  { id: 'deliveries', label: 'Deliveries', icon: (
-    <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M13.3333 5.83333H15.8333L18.3333 8.33333V13.3333H16.6667" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M5 13.3333V5.83333H13.3333" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M3.33333 15.8333C4.71405 15.8333 5.83333 14.714 5.83333 13.3333C5.83333 11.9526 4.71405 10.8333 3.33333 10.8333C1.95262 10.8333 0.833336 11.9526 0.833336 13.3333C0.833336 14.714 1.95262 15.8333 3.33333 15.8333Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M16.6667 15.8333C18.0474 15.8333 19.1667 14.714 19.1667 13.3333C19.1667 11.9526 18.0474 10.8333 16.6667 10.8333C15.286 10.8333 14.1667 11.9526 14.1667 13.3333C14.1667 14.714 15.286 15.8333 16.6667 15.8333Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )},
+  )}
 ];
 
 const formatDate = (dateString?: string) => {
@@ -120,8 +100,10 @@ const formatDate = (dateString?: string) => {
   }
 };
 
-const getStatusColor = (status: Delivery['status']) => {
+const getStatusColor = (status: 'pending' | 'in_progress' | 'delivered' | 'failed' | 'unassigned') => {
   switch (status) {
+    case 'unassigned':
+      return 'bg-gray-100 text-gray-800';
     case 'pending':
       return 'bg-yellow-100 text-yellow-800';
     case 'in_progress':
@@ -171,9 +153,22 @@ export default function PatientDetailsPage() {
     setEditedData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSaveChanges = () => {
-    // Implement the logic to update the patient data
-    console.log('Saving changes');
+  const handleSaveChanges = async () => {
+    try {
+      // Update patient data
+      const updatedPatients = patients.map(p => 
+        p.id === patient.id ? editedData : p
+      );
+      
+      // Save to storage/context
+      localStorage.setItem('patients', JSON.stringify(updatedPatients));
+      
+      setIsEditing(false);
+      toast.success('Patient information updated successfully');
+    } catch (error) {
+      toast.error('Failed to update patient information');
+      console.error('Error updating patient:', error);
+    }
   };
 
   return (
@@ -361,13 +356,19 @@ export default function PatientDetailsPage() {
 
                     {/* Save Changes button */}
                     {isEditing && (
-                      <div className="flex justify-end">
-                        <button
+                      <div className="flex justify-end space-x-4 mt-6">
+                        <Button
+                          onClick={() => setIsEditing(false)}
+                          className="px-4 py-2"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
                           onClick={handleSaveChanges}
-                          className="inline-flex items-center justify-center rounded-md bg-blue-100 px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                          className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 transition-colors"
                         >
                           Save Changes
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -386,7 +387,9 @@ export default function PatientDetailsPage() {
                       <div key={delivery.id} className="border rounded-lg p-4 space-y-4">
                         <div className="flex justify-between items-start">
                           <div>
-                            <h3 className="font-medium">{delivery.items.join(', ')}</h3>
+                            <h3 className="font-medium">
+                              {Array.isArray(delivery.items) ? delivery.items.join(', ') : delivery.items}
+                            </h3>
                             <p className="text-sm text-gray-500">
                               {formatDate(delivery.date)}
                             </p>
@@ -432,17 +435,7 @@ export default function PatientDetailsPage() {
                     <div className="space-y-6">
                       <div className="flex items-center space-x-4">
                         <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-xl font-medium text-gray-600">
-                          {patientDeliveries[0].rider.avatar ? (
-                            <Image
-                              src={patientDeliveries[0].rider.avatar}
-                              alt={patientDeliveries[0].rider.name}
-                              width={64}
-                              height={64}
-                              className="rounded-full"
-                            />
-                          ) : (
-                            patientDeliveries[0].rider.name.split(' ').map(n => n[0]).join('')
-                          )}
+                          {patientDeliveries[0].rider.name.split(' ').map(n => n[0]).join('')}
                         </div>
                         <div>
                           <h3 className="text-lg font-medium">{patientDeliveries[0].rider.name}</h3>
@@ -457,13 +450,6 @@ export default function PatientDetailsPage() {
                             <span className="text-sm text-gray-600">{patientDeliveries[0].rider.totalDeliveries} deliveries</span>
                           </div>
                         </div>
-                        <div className="ml-auto">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            patientDeliveries[0].rider.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {patientDeliveries[0].rider.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -472,133 +458,19 @@ export default function PatientDetailsPage() {
                           <p className="text-sm text-gray-600">{patientDeliveries[0].rider.phone}</p>
                         </div>
                         <div>
-                          <h4 className="text-sm font-medium text-gray-700">Email</h4>
-                          <p className="text-sm text-gray-600">{patientDeliveries[0].rider.email}</p>
+                          <h4 className="text-sm font-medium text-gray-700">Vehicle Type</h4>
+                          <p className="text-sm text-gray-600">{patientDeliveries[0].rider.vehicleType}</p>
                         </div>
                       </div>
 
-                      {patientDeliveries[0].rider.currentLocation && (
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <h4 className="text-sm font-medium text-gray-700 mb-2">Current Location</h4>
-                          <div className="bg-gray-50 rounded-lg p-4">
-                            <p className="text-sm text-gray-600">
-                              Location: {patientDeliveries[0].rider.currentLocation.lat}, {patientDeliveries[0].rider.currentLocation.lng}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              Last updated: {formatDate(patientDeliveries[0].rider.currentLocation.lastUpdated)}
-                            </p>
-                          </div>
+                          <h4 className="text-sm font-medium text-gray-700">Success Rate</h4>
+                          <p className="text-sm text-gray-600">{patientDeliveries[0].rider.successRate}% success rate</p>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
-                </div>
-              </div>
-            )}
-
-            {activeSection === 'prescriptions' && (
-              <div className="space-y-6">
-                {/* Active Prescriptions */}
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h2 className="text-lg font-medium mb-4">Active Prescriptions</h2>
-                  <div className="space-y-4">
-                    {patient.prescriptions
-                      .filter(p => p.status === 'active')
-                      .map(prescription => (
-                        <div key={prescription.id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start mb-4">
-                            <div>
-                              <h3 className="font-medium">{prescription.medicationName}</h3>
-                              <p className="text-sm text-gray-500">
-                                {prescription.dosage} - {prescription.frequency}
-                              </p>
-                            </div>
-                            <PatientStatusBadge status={prescription.status} />
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div>
-                              <p className="text-sm text-gray-500">Start Date</p>
-                              <p className="font-medium">
-                                {new Date(prescription.startDate).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-gray-500">End Date</p>
-                              <p className="font-medium">
-                                {new Date(prescription.endDate).toLocaleDateString()}
-                              </p>
-                            </div>
-                          </div>
-
-                          <PrescriptionRenewalForm 
-                            patientId={patient.id} 
-                            prescription={prescription}
-                          />
-                        </div>
-                      ))}
-                  </div>
-                </div>
-
-                {/* Prescription History */}
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h2 className="text-lg font-medium mb-4">Medication History</h2>
-                  <PrescriptionHistory history={patient.medicationHistory} />
-                </div>
-              </div>
-            )}
-
-            {activeSection === 'deliveries' && (
-              <div className="bg-white shadow rounded-lg p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-lg font-medium">Deliveries</h2>
-                  <Link
-                    href={`/deliveries/new?patientId=${patient?.id}`}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-                  >
-                    Schedule New Delivery
-                  </Link>
-                </div>
-
-                <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Date
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Items
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Rider
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {patientDeliveries.map((delivery) => (
-                        <tr key={delivery.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {new Date(delivery.date).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            {delivery.items.join(', ')}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(delivery.status)}`}>
-                              {delivery.status.replace('_', ' ').toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {delivery.riderName}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
                 </div>
               </div>
             )}

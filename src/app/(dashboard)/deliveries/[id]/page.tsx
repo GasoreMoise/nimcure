@@ -3,20 +3,21 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useDeliveries } from '@/contexts/DeliveryContext';
+import { useDeliveries, type Delivery, type DeliveryStatus } from '@/contexts/DeliveryContext';
 import { useDelivery } from '@/hooks/useDelivery';
 import { checkDeliveryStatus } from '@/utils/delivery';
-import type { Delivery } from '@/contexts/DeliveryContext';
 import { Notification } from '@/components/ui/Notification';
+import { useAdmin } from '@/contexts/AdminContext';
 
 export default function DeliveryDetailsPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const { deliveries, updateDelivery } = useDeliveries();
+  const { deliveries, updateDelivery, updateDeliveryPayment, updateDeliveryStatus } = useDeliveries();
   const { delivery, isLoading, error } = useDelivery(params.id);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState('');
+  const { isAdmin } = useAdmin();
 
   if (isLoading) return <div>Loading...</div>;
   if (error) return <div>Error loading delivery</div>;
@@ -63,21 +64,9 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
     setIsUpdating(true);
     try {
       if (newStatus === 'paid' || newStatus === 'unpaid') {
-        await updateDelivery(delivery.id, {
-          ...delivery,
-          paymentStatus: newStatus
-        });
+        await updateDeliveryPayment(delivery.id, newStatus as 'paid' | 'unpaid');
       } else {
-        await updateDelivery(delivery.id, {
-          ...delivery,
-          status: newStatus,
-          tracking: {
-            ...delivery.tracking,
-            status: newStatus,
-            lastUpdated: new Date().toISOString(),
-            estimatedArrival: delivery.tracking?.estimatedArrival || new Date().toISOString()
-          }
-        });
+        await updateDeliveryStatus(delivery.id, newStatus as DeliveryStatus);
       }
       setShowStatusDropdown(false);
       setNotificationMessage(`Status has been successfully updated to ${newStatus.toUpperCase()}`);
@@ -92,10 +81,7 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
 
   const handlePaymentUpdate = async (newStatus: 'paid' | 'unpaid') => {
     try {
-      await updateDelivery(delivery.id, {
-        ...delivery,
-        paymentStatus: newStatus
-      });
+      await updateDeliveryPayment(delivery.id, newStatus);
     } catch (error) {
       console.error('Failed to update payment status:', error);
     }
@@ -301,6 +287,41 @@ export default function DeliveryDetailsPage({ params }: { params: { id: string }
           </div>
         </div>
         {renderActionButtons()}
+        {isAdmin && (
+          <div className="mt-6 space-y-4 bg-white p-4 rounded-lg shadow">
+            <h3 className="text-lg font-medium">Admin Controls</h3>
+            
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Payment Status
+              </label>
+              <select
+                value={delivery.paymentStatus}
+                onChange={(e) => handlePaymentUpdate(e.target.value as 'paid' | 'unpaid')}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              >
+                <option value="unpaid">Unpaid</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Delivery Status
+              </label>
+              <select
+                value={delivery.status}
+                onChange={(e) => handleStatusUpdate(e.target.value as DeliveryStatus)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              >
+                <option value="pending">Pending</option>
+                <option value="in_progress">In Progress</option>
+                <option value="delivered">Delivered</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,10 +1,13 @@
 import { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { Providers } from './providers';
-import { PatientsProvider } from '@/contexts/PatientsContext';
+import { Providers } from '@/components/providers/Providers';
+import { AuthProvider } from '@/contexts/AuthContext';
 import { DeliveryProvider } from '@/contexts/DeliveryContext';
+import { AdminProvider } from '@/contexts/AdminContext';
+import { PatientsProvider } from '@/contexts/PatientsContext';
 import { RiderProvider } from '@/contexts/RiderContext';
+import { Toaster } from 'react-hot-toast';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -37,8 +40,19 @@ export default function RootLayout({
       <head />
       <body className={inter.className}>
         <Providers>
-          {children}
+          <AuthProvider>
+            <AdminProvider>
+              <PatientsProvider>
+                <RiderProvider>
+                  <DeliveryProvider>
+                    {children}
+                  </DeliveryProvider>
+                </RiderProvider>
+              </PatientsProvider>
+            </AdminProvider>
+          </AuthProvider>
         </Providers>
+        <Toaster position="top-right" />
       </body>
     </html>
   );

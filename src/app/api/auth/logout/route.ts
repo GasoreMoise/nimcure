@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../[...nextauth]/route';
 
 export async function POST() {
   try {
-    // Clear auth cookie
-    const cookieStore = cookies();
-    cookieStore.delete('auth');
+    const session = await getServerSession(authOptions);
+    
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

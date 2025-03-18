@@ -1,119 +1,146 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { signIn, signOut, useSession, getSession } from 'next-auth/react';
 
 interface User {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  phoneNumber: string;
-  licenseNumber: string;
+  role: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  avatar?: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (userData: RegisterData) => Promise<void>;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<string>;
   logout: () => Promise<void>;
-}
-
-interface RegisterData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneNumber: string;
-  licenseNumber: string;
-  password: string;
+  adminLogin: (email: string, password: string) => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in on mount
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const response = await fetch('/api/auth/me');
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-      }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-    } finally {
-      setLoading(false);
+    if (session?.user) {
+      const savedUserData = localStorage.getItem('userData');
+      const savedAvatar = localStorage.getItem('userAvatar');
+      
+      const userData = savedUserData ? JSON.parse(savedUserData) : null;
+      
+      setUser({
+        id: session.user.id,
+        email: session.user.email!,
+        role: session.user.role,
+        firstName: session.user.name?.split(' ')[0],
+        lastName: session.user.name?.split(' ')[1],
+        avatar: savedAvatar || userData?.avatar || null,
+        ...userData
+      });
+      setIsLoading(false);
+    } else {
+      setUser(null);
+      setIsLoading(status === 'loading');
     }
-  };
+  }, [session, status]);
 
-  const login = async (email: string, password: string) => {
+  // Add this console.log to debug
+  console.log('Current user:', user);
+  console.log('Current session:', session);
+
+  const login = async (email: string, password: string): Promise<string> => {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Login failed');
+      if (result?.error) {
+        throw new Error(result.error);
       }
 
-      const userData = await response.json();
-      setUser(userData);
-      router.push('/dashboard');
-    } catch (error) {
+      // Wait for session to be updated
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Check if user is admin
+      const session = await getSession();
+      if (session?.user?.role === 'ADMIN') {
+        return '/admin/dashboard';
+      }
+      return '/dashboard';
+    } catch (error: any) {
       console.error('Login error:', error);
-      throw error;
-    }
-  };
-
-  const register = async (userData: RegisterData) => {
-    try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Registration failed');
-      }
-
-      const data = await response.json();
-      setUser(data);
-      router.push('/dashboard');
-    } catch (error) {
-      console.error('Registration error:', error);
       throw error;
     }
   };
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      setUser(null);
-      router.push('/login');
+      await signOut({ redirect: false });
+      window.location.href = '/login';
     } catch (error) {
       console.error('Logout error:', error);
       throw error;
     }
   };
 
+  const adminLogin = async (email: string, password: string) => {
+    try {
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+        callbackUrl: '/admin/dashboard'
+      });
+
+      if (result?.error) {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      console.error('Admin login error:', error);
+      throw error;
+    }
+  };
+
+  const updateProfile = async (data: Partial<User>) => {
+    try {
+      // Update user state with new data
+      const updatedUser = user ? { ...user, ...data } : null;
+      setUser(updatedUser);
+
+      // Store in localStorage
+      if (updatedUser) {
+        localStorage.setItem('userData', JSON.stringify(updatedUser));
+      }
+
+      // If there's an avatar, store it separately to handle large strings
+      if (data.avatar) {
+        localStorage.setItem('userAvatar', data.avatar);
+      }
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      throw error;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      isLoading, 
+      login, 
+      logout, 
+      adminLogin,
+      updateProfile 
+    }}>
       {children}
     </AuthContext.Provider>
   );

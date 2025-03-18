@@ -1,5 +1,8 @@
 import { hash, compare } from 'bcryptjs';
 import { prisma } from './db';
+import { getServerSession } from 'next-auth';
+import { NextResponse } from 'next/server';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
 type UserCreateInput = {
   email: string;
@@ -111,4 +114,44 @@ export async function getUserByEmail(email: string) {
 
 export async function verifyPassword(password: string, hashedPassword: string) {
   return compare(password, hashedPassword);
+}
+
+export async function getAuthSession() {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    throw new Error('Unauthorized');
+  }
+  return session;
+}
+
+export async function requireAuth(handler: Function) {
+  return async function(request: Request) {
+    try {
+      await getAuthSession();
+      return handler(request);
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+  };
+}
+
+export async function requireAdmin(handler: Function) {
+  return async function(request: Request) {
+    try {
+      const session = await getAuthSession();
+      if (session.user.role !== 'ADMIN') {
+        throw new Error('Forbidden');
+      }
+      return handler(request);
+    } catch (error: any) {
+      const status = error.message === 'Forbidden' ? 403 : 401;
+      return NextResponse.json(
+        { error: error.message === 'Forbidden' ? 'Forbidden' : 'Unauthorized' },
+        { status }
+      );
+    }
+  };
 }

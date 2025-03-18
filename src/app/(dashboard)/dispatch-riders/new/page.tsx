@@ -32,10 +32,11 @@ export default function NewRiderPage() {
         ...formData,
         rating: 0,
         totalDeliveries: 0,
+        totalRatings: 0,
         successRate: 0,
         vehicleType: 'motorcycle' as const,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
 
       await addRider(newRider);

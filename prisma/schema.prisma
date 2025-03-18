@@ -24,57 +24,60 @@ model User {
   resetTokenExpiry  DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  role              String    @default("USER")
 }
 
 model Delivery {
-  id            String   @id @default(cuid())
-  riderId       String?
-  rider         Rider?   @relation(fields: [riderId], references: [id])
-  paymentStatus String   // 'paid' or 'unpaid'
-  status        String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  patient       Patient  @relation(fields: [patientId], references: [id])
-  patientId     String
-  items         String   // Store as JSON string
+  id            String      @id @default(cuid())
+  status        String      @default("PENDING")
+  paymentStatus String      @default("PENDING")
+  items         String      // Store as JSON string
   location      String
   notes         String?
-  tracking      Json    // For storing tracking information
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  patient       Patient     @relation(fields: [patientId], references: [id])
+  patientId     String
+  rider         Rider?      @relation(fields: [riderId], references: [id])
+  riderId       String?
+  tracking      String?     // Store as JSON string
 }
 
 model Patient {
-  id         String     @id @default(cuid())
-  name       String
-  email      String     @unique
-  phone      String
-  address    String
-  deliveries Delivery[]
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id          String      @id @default(cuid())
+  firstName   String
+  lastName    String
+  email       String      @unique
+  phone       String
+  address     String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deliveries  Delivery[]
 }
 
 model Rider {
-  id            String          @id @default(cuid())
-  firstName     String
-  lastName      String
-  email         String          @unique
-  phone         String
-  vehicleType   String
-  status        String          // 'assigned' or 'unassigned'
-  rating        Float           @default(0)
-  totalRatings  Int            @default(0)
-  successRate   Float          @default(0)
-  totalDeliveries Int          @default(0)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  deliveries    Delivery[]
-  ratingHistory RatingHistory[]
+  id              String      @id @default(cuid())
+  firstName       String
+  lastName        String
+  email           String      @unique
+  phone           String
+  status          String      @default("INACTIVE")
+  vehicleType     String      // Instead of enum
+  rating          Float       @default(0)
+  totalRatings    Int         @default(0)
+  successRate     Float       @default(0)
+  totalDeliveries Int         @default(0)
+  ratingHistory   String?     // Store as JSON string
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deliveries      Delivery[]
 }
 
-model RatingHistory {
-  id        String   @id @default(cuid())
-  rating    Float
-  date      DateTime @default(now())
-  riderId   String
-  rider     Rider    @relation(fields: [riderId], references: [id])
-}
+// Keep these as constants in your application code instead
+// export const DeliveryStatus = {
+//   PENDING: 'PENDING',
+//   ASSIGNED: 'ASSIGNED',
+//   IN_PROGRESS: 'IN_PROGRESS',
+//   DELIVERED: 'DELIVERED',
+//   CANCELLED: 'CANCELLED'
+// } as const;

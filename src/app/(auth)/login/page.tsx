@@ -27,7 +27,8 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(formData.email, formData.password);
+      const redirectUrl = await login(formData.email, formData.password);
+      window.location.href = redirectUrl;
     } catch (error: any) {
       if (error.needsVerification) {
         setNeedsVerification(true);

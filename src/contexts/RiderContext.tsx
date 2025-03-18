@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect } from 'react';
+import { useAdmin } from './AdminContext';
+import { useAuth } from './AuthContext';
 
 export type RiderStatus = 'available' | 'on_delivery' | 'offline';
 
@@ -29,13 +31,16 @@ interface RiderContextType {
   loading: boolean;
   error: string | null;
   refreshRiders: () => Promise<void>;
-  addRider: (rider: Omit<Rider, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  addRider: (riderData: Omit<Rider, 'id'>) => Promise<void>;
   updateRider: (id: string, rider: Partial<Rider>) => Promise<void>;
 }
 
 const RiderContext = createContext<RiderContextType | undefined>(undefined);
 
 export function RiderProvider({ children }: { children: React.ReactNode }) {
+  const { isAdmin } = useAdmin();
+  const { user } = useAuth();
+  const isAdminAuth = user?.role === 'ADMIN';
   const [riders, setRiders] = useState<Rider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,14 +67,17 @@ export function RiderProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addRider = async (rider: Omit<Rider, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addRider = async (riderData: Omit<Rider, 'id'>) => {
+    if (!isAdminAuth) {
+      throw new Error('Only administrators can create new riders');
+    }
     try {
       const response = await fetch('/api/riders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(rider),
+        body: JSON.stringify(riderData),
       });
 
       if (!response.ok) {

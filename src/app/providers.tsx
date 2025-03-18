@@ -1,6 +1,7 @@
 'use client';
 
 import { AuthProvider } from '@/contexts/AuthContext';
+import { AdminProvider } from '@/contexts/AdminContext';
 import { PatientsProvider } from '@/contexts/PatientsContext';
 import { DeliveryProvider } from '@/contexts/DeliveryContext';
 import { RiderProvider } from '@/contexts/RiderContext';
@@ -13,13 +14,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <PatientsProvider>
-          <DeliveryProvider>
-            <RiderProvider>
-              {children}
-            </RiderProvider>
-          </DeliveryProvider>
-        </PatientsProvider>
+        <AdminProvider>
+          <PatientsProvider>
+            <DeliveryProvider>
+              <RiderProvider>
+                {children}
+              </RiderProvider>
+            </DeliveryProvider>
+          </PatientsProvider>
+        </AdminProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

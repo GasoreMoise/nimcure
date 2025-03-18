@@ -1,50 +1,64 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { validateUser } from '@/lib/auth';
-import type { LoginRequest } from '@/lib/types';
+import { prisma } from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../[...nextauth]/route';
 
 export async function POST(request: Request) {
   try {
-    const body: LoginRequest = await request.json();
+    const { email, password } = await request.json();
 
-    // Validate required fields
-    if (!body.email || !body.password) {
+    if (!email || !password) {
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
       );
     }
 
-    // Validate user and check email verification
-    const user = await validateUser(body.email, body.password);
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        phoneNumber: true,
+        licenseNumber: true,
+        emailVerified: true
+      }
+    });
 
-    if (!user.emailVerified) {
+    if (!user) {
       return NextResponse.json(
-        { 
-          error: 'Please verify your email before logging in',
-          needsVerification: true 
-        },
+        { error: 'Invalid credentials' },
         { status: 401 }
       );
     }
 
-    // Create auth cookie
-    const cookieStore = cookies();
-    cookieStore.set('auth', JSON.stringify({ email: user.email }), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 7 // 7 days
-    });
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { error: 'Please verify your email before logging in', needsVerification: true },
+        { status: 403 }
+      );
+    }
 
-    // Return success response with user data
-    return NextResponse.json(user);
-  } catch (error) {
+    if (!bcrypt.compareSync(password, user.password)) {
+      return NextResponse.json(
+        { error: 'Invalid credentials' },
+        { status: 401 }
+      );
+    }
+
+    const { password: _, ...userWithoutPassword } = user;
+
+    return NextResponse.json({ user: userWithoutPassword });
+  } catch (error: any) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Login failed' },
-      { status: 401 }
+      { error: 'Authentication failed' },
+      { status: 500 }
     );
   }
 }

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { RiderStatusBadge } from '@/components/riders/RiderStatusBadge';
+import { useAdmin } from '@/contexts/AdminContext';
 
 export default function DispatchRidersPage() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function DispatchRidersPage() {
   const [sortBy, setSortBy] = useState('Name');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isAdmin } = useAdmin();
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -38,7 +40,11 @@ export default function DispatchRidersPage() {
     setError(null);
 
     try {
-      await addRider(formData);
+      await addRider({
+        ...formData,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
       setIsAddModalOpen(false);
       // Reset form
       setFormData({
@@ -98,12 +104,14 @@ export default function DispatchRidersPage() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-gray-900">Dispatch Riders</h1>
-          <Button
-            onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            + Add Rider
-          </Button>
+          {isAdmin && (
+            <Button
+              onClick={() => setIsAddModalOpen(true)}
+              className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              + Add Rider
+            </Button>
+          )}
         </div>
 
         <div className="flex justify-between items-center mb-6">

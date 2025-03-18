@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { Menu } from '@/components/ui/Menu';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -70,17 +71,17 @@ const navigation = [
 ];
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
-  const { user, logout, loading } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!isLoading && !user) {
       router.push('/login');
     }
-  }, [loading, user, router]);
+  }, [isLoading, user, router]);
 
   const handleLogout = async () => {
     try {
@@ -98,7 +99,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     return pathname.startsWith(href) && href !== '/dashboard';
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -159,26 +160,45 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
               <div className="relative ml-3">
                 <div className="flex items-center space-x-3">
                   <span className="text-sm text-gray-500">{user.firstName} {user.lastName}</span>
-                  <button
-                    type="button"
-                    className="flex rounded-full bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                  >
-                    <span className="sr-only">Open user menu</span>
-                    <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-600">{user.firstName.charAt(0)}{user.lastName.charAt(0)}</span>
-                    </div>
-                  </button>
-                  {isProfileMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 z-10 ring-1 ring-black ring-opacity-5">
-                      <button
-                        onClick={handleLogout}
-                        className="block w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50"
-                      >
-                        Sign out
-                      </button>
-                    </div>
-                  )}
+                  <Menu.Root>
+                    <Menu.Button className="flex items-center">
+                      {user?.avatar ? (
+                        <img 
+                          src={user.avatar} 
+                          alt="Profile" 
+                          className="h-8 w-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center">
+                          <span className="text-sm font-medium text-gray-600">
+                            {user?.firstName?.charAt(0) ?? ''}{user?.lastName?.charAt(0) ?? ''}
+                          </span>
+                        </div>
+                      )}
+                    </Menu.Button>
+                    <Menu.Items className="absolute right-0 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                      <Menu.Item>
+                        {({ active }) => (
+                          <Link
+                            href="/profile/edit"
+                            className={`${active ? 'bg-gray-100' : ''} block px-4 py-2 text-sm text-gray-700`}
+                          >
+                            Edit Profile
+                          </Link>
+                        )}
+                      </Menu.Item>
+                      <Menu.Item>
+                        {({ active }) => (
+                          <button
+                            onClick={handleLogout}
+                            className={`${active ? 'bg-gray-100' : ''} block w-full text-left px-4 py-2 text-sm text-gray-700`}
+                          >
+                            Sign out
+                          </button>
+                        )}
+                      </Menu.Item>
+                    </Menu.Items>
+                  </Menu.Root>
                 </div>
               </div>
             </div>
